@@ -3,10 +3,19 @@ from dash import Dash, html, dash_table, dcc, callback, Output, Input, State
 import pandas as pd
 import plotly.express as px
 import dash_bootstrap_components as dbc
+import os
 
 # Load the data
-file_path = r"\\atlas.shore.mbari.org\ProjectLibrary\901805_Coastal_Biogeochemical_Sensing\Spray_Data\25202901\25202901RT.txt"
-df = pd.read_csv(file_path, delimiter="\t", skiprows=6)
+# file_path = r"\\atlas.shore.mbari.org\ProjectLibrary\901805_Coastal_Biogeochemical_Sensing\Spray_Data\25202901\25202901RT.txt"
+# df = pd.read_csv(file_path, delimiter="\t", skiprows=6)
+
+folder_path = r"\\sirocco\wwwroot\lobo\Data\GliderVizData"
+files = [f for f in os.listdir(folder_path) if 'RT.txt' in f]
+
+# Need a better method for initializing the app that uses the function below
+filename = os.path.join(folder_path, files[-1])
+
+df = pd.read_csv(filename, delimiter="\t", skiprows=6)
 
 # Replace missing values
 df.replace(-1e10, pd.NA, inplace=True)
@@ -55,7 +64,19 @@ dropdown_options = [
 
 # App layout
 app.layout = dbc.Container([
+    
     dbc.Row([html.H3('Glide App', className="text-primary text-center")]),
+
+    dbc.Row([
+        dbc.Col([
+            html.Label("Select Deployment:"),
+            dcc.Dropdown(files, files[-1], id='Deployment-Dropdown', clearable=False)
+        ], width=3)
+    ], className="mb-3"),
+    
+    dbc.Row([
+        dbc.Col(html.Div(id="file-output"))  # Output container
+    ]),
 
     dbc.Row([
         dbc.Col([
@@ -115,6 +136,37 @@ app.layout = dbc.Container([
 
 ], fluid=True)
 
+# Dynamically load file
+@callback(
+    [Output('file-output', 'children'),
+     Output('station-range-slider', 'min'),
+     Output('station-range-slider', 'max'),
+     Output('station-range-slider', 'value'),
+     Output('date-picker-range', 'min_date_allowed'),
+     Output('date-picker-range', 'max_date_allowed'),
+     Output('date-picker-range', 'start_date'),
+     Output('date-picker-range', 'end_date')],
+    Input('Deployment-Dropdown', 'value')
+)
+def update_file(selected_file):
+    # Construct the full file path
+    filename = os.path.join(folder_path, selected_file)
+    df = pd.read_csv(filename, delimiter="\t", skiprows=6)
+
+    # Replace missing values
+    df.replace(-1e10, pd.NA, inplace=True)
+
+    # Convert date column to datetime
+    df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
+
+    # Get new min/max values for filters
+    station_min, station_max = df["Station"].min(), df["Station"].max()
+    date_min, date_max = df["Date"].min(), df["Date"].max()
+
+    # Return updated values for filters
+    return f"Loaded: {selected_file}", station_min, station_max, [station_min, station_max], date_min, date_max, date_min, date_max
+
+
 @callback(
     [Output('station-range-slider', 'disabled'),
      Output('date-picker-range', 'disabled')],
@@ -134,6 +186,7 @@ def toggle_filters(selected_filter):
         Input('date-picker-range', 'end_date'),
     ]
 )
+
 def update_graph(x_column, y_column, filter_method, station_range, start_date, end_date):
     if filter_method == 'station':
         filtered_df = df[(df["Station"] >= station_range[0]) & (df["Station"] <= station_range[1])]
