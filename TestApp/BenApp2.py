@@ -5,10 +5,6 @@ import plotly.express as px
 import dash_bootstrap_components as dbc
 import os
 
-# Load the data
-# file_path = r"\\atlas.shore.mbari.org\ProjectLibrary\901805_Coastal_Biogeochemical_Sensing\Spray_Data\25202901\25202901RT.txt"
-# df = pd.read_csv(file_path, delimiter="\t", skiprows=6)
-
 folder_path = r"\\sirocco\wwwroot\lobo\Data\GliderVizData"
 files = [f for f in os.listdir(folder_path) if 'RT.txt' in f]
 
@@ -25,7 +21,7 @@ df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
 
 # Get min/max values for filters
 station_min, station_max = df["Station"].min(), df["Station"].max()
-date_min, date_max = df["Date"].min(), df["Date"].max()
+date_min, date_max = df["Date"].min(), df["Date"].max() 
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = [dbc.themes.CERULEAN]
@@ -70,7 +66,7 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col([
             html.Label("Select Deployment:"),
-            dcc.Dropdown(files, files[-1], id='Deployment-Dropdown', clearable=False)
+            dcc.Dropdown(files, files[-1], id='Deployment-Dropdown', clearable=True)
         ], width=3)
     ], className="mb-3"),
     
@@ -84,8 +80,9 @@ app.layout = dbc.Container([
             dcc.RadioItems(
                 id='filter-method',
                 options=[
-                    {'label': 'Filter by Profile', 'value': 'station'},
-                    {'label': 'Filter by Date', 'value': 'date'}
+                    {'label': 'Filter by Profile Range', 'value': 'station'},
+                    {'label': 'Filter by Date', 'value': 'date'},
+                    {'label': 'Filter by Profile', 'value': 'profile'}
                 ],
                 value='station',
                 inline=False
@@ -110,8 +107,18 @@ app.layout = dbc.Container([
                 max_date_allowed=date_max,
                 start_date=date_min,
                 end_date=date_max
-            )
-        ], width=3),
+            ),
+            html.Br(),
+            html.Label("Profile"),
+            dcc.Input(
+                id='profile-number',
+                type='number',
+                min=station_min,
+                max=station_max,
+                placeholder=station_max
+                )
+
+        ], width=6),
     ], className="mb-3"),
 
     dbc.Row([
@@ -176,23 +183,39 @@ def toggle_filters(selected_filter):
     return selected_filter != 'station', selected_filter != 'date'
 
 @callback(
-    [Output('scatter-plot', 'figure'), Output('map-plot', 'figure')],
-    [
-        Input('x-axis-dropdown', 'value'),
-        Input('y-axis-dropdown', 'value'),
-        Input('filter-method', 'value'),
-        Input('station-range-slider', 'value'),
-        Input('date-picker-range', 'start_date'),
-        Input('date-picker-range', 'end_date'),
-    ]
+    Output('profile-number', 'disabled'),
+    Input('filter-method', 'value')
 )
+def toggle_profile_input(selected_filter):
+    return selected_filter != 'profile'  # Disable input unless 'profile' is selected
 
-def update_graph(x_column, y_column, filter_method, station_range, start_date, end_date):
-    if filter_method == 'station':
+
+@callback(
+    [Output('scatter-plot', 'figure'), Output('map-plot', 'figure')],
+    [Input('x-axis-dropdown', 'value'),
+     Input('y-axis-dropdown', 'value'),
+     Input('filter-method', 'value'),
+     Input('station-range-slider', 'value'),
+     Input('date-picker-range', 'start_date'),
+     Input('date-picker-range', 'end_date'),
+     Input('profile-number', 'value'),
+     State('Deployment-Dropdown', 'value')]
+)
+def update_graph(x_column, y_column, filter_method, station_range, start_date, end_date, profile_number, selected_file):
+    filename = os.path.join(folder_path, selected_file)
+    df = pd.read_csv(filename, delimiter="\t", skiprows=6)
+    df.replace(-1e10, pd.NA, inplace=True)
+    df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
+
+    # Apply filter based on the selected method
+    if filter_method == 'station':  # Profile Range
         filtered_df = df[(df["Station"] >= station_range[0]) & (df["Station"] <= station_range[1])]
-    else:
+    elif filter_method == 'date':  # Date Range
         filtered_df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
+    else:  # Profile number
+        filtered_df = df[df["Station"] == profile_number] if profile_number is not None else df
 
+    # Scatter Plot
     scatter_fig = px.scatter(
         filtered_df, x=x_column, y=y_column,
         labels={x_column: x_column, y_column: y_column},
@@ -202,6 +225,7 @@ def update_graph(x_column, y_column, filter_method, station_range, start_date, e
     scatter_fig.update_yaxes(autorange="reversed")
     scatter_fig.update_layout(height=600, width=600)
 
+    # Map Plot
     map_fig = px.scatter_map(
         filtered_df, lat="Lat [°N]", lon="Lon [°E]",
         hover_name="Station",
