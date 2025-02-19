@@ -6,7 +6,8 @@ import dash_bootstrap_components as dbc
 import os
 
 # Hardcode path to files and create list
-folder_path = r"\\sirocco\wwwroot\lobo\Data\GliderVizData"
+# folder_path = r"\\sirocco\wwwroot\lobo\Data\GliderVizData"
+folder_path = r"https://github.com/Benwerb/PlotlyDashApps/tree/3401150177166a2a0234c9339782415f27aa7a5b/TestApp"
 files = [f for f in os.listdir(folder_path) if 'RT.txt' in f]
 
 
