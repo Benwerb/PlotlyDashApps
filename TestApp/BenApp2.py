@@ -8,16 +8,34 @@ import os
 folder_path = r"\\sirocco\wwwroot\lobo\Data\GliderVizData"
 files = [f for f in os.listdir(folder_path) if 'RT.txt' in f]
 
-# Need a better method for initializing the app that uses the function below
-filename = os.path.join(folder_path, files[-1])
 
-df = pd.read_csv(filename, delimiter="\t", skiprows=6)
+# Load and clean data
+def load_latest_data(folder_path, selected_file=None):
+    """Loads the latest RT.txt file, cleans it, and returns a DataFrame."""
 
-# Replace missing values
-df.replace(-1e10, pd.NA, inplace=True)
+    filename = os.path.join(folder_path, folder_path, selected_file if selected_file else files[-1])
+    df = pd.read_csv(filename, delimiter="\t", skiprows=6)
 
-# Convert date column to datetime
-df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
+    # Clean data
+    df.replace(-1e10, pd.NA, inplace=True)
+    df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
+
+    return df
+
+df = load_latest_data(folder_path)
+
+# files = [f for f in os.listdir(folder_path) if 'RT.txt' in f]
+
+# # Need a better method for initializing the app that uses the function below
+# filename = os.path.join(folder_path, files[-1])
+
+# df = pd.read_csv(filename, delimiter="\t", skiprows=6)
+
+# # Replace missing values
+# df.replace(-1e10, pd.NA, inplace=True)
+
+# # Convert date column to datetime
+# df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
 
 # Get min/max values for filters
 station_min, station_max = df["Station"].min(), df["Station"].max()
@@ -156,15 +174,15 @@ app.layout = dbc.Container([
     Input('Deployment-Dropdown', 'value')
 )
 def update_file(selected_file):
-    # Construct the full file path
-    filename = os.path.join(folder_path, selected_file)
-    df = pd.read_csv(filename, delimiter="\t", skiprows=6)
+    # # Construct the full file path
+    # filename = os.path.join(folder_path, selected_file)
+    # df = pd.read_csv(filename, delimiter="\t", skiprows=6)
+    # # Replace missing values
+    # df.replace(-1e10, pd.NA, inplace=True)
+    # # Convert date column to datetime
+    # df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
 
-    # Replace missing values
-    df.replace(-1e10, pd.NA, inplace=True)
-
-    # Convert date column to datetime
-    df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
+    df = load_latest_data(folder_path,selected_file)
 
     # Get new min/max values for filters
     station_min, station_max = df["Station"].min(), df["Station"].max()
@@ -202,10 +220,12 @@ def toggle_profile_input(selected_filter):
      State('Deployment-Dropdown', 'value')]
 )
 def update_graph(x_column, y_column, filter_method, station_range, start_date, end_date, profile_number, selected_file):
-    filename = os.path.join(folder_path, selected_file)
-    df = pd.read_csv(filename, delimiter="\t", skiprows=6)
-    df.replace(-1e10, pd.NA, inplace=True)
-    df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
+    # filename = os.path.join(folder_path, selected_file)
+    # df = pd.read_csv(filename, delimiter="\t", skiprows=6)
+    # df.replace(-1e10, pd.NA, inplace=True)
+    # df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
+
+    df = load_latest_data(folder_path,selected_file)
 
     # Apply filter based on the selected method
     if filter_method == 'station':  # Profile Range
@@ -237,4 +257,5 @@ def update_graph(x_column, y_column, filter_method, station_range, start_date, e
     return scatter_fig, map_fig
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # app.run(debug=True)
+    app.run(host='0.0.0.0', port=8050, debug=True)
