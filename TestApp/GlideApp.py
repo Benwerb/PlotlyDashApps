@@ -4,10 +4,11 @@ import pandas as pd
 import plotly.express as px
 import dash_bootstrap_components as dbc
 import os
+import plotly.graph_objects as go
 
 # Hardcode path to files and create list
-# folder_path = r"\\sirocco\wwwroot\lobo\Data\GliderVizData"
-folder_path = r"https://github.com/Benwerb/PlotlyDashApps/tree/3401150177166a2a0234c9339782415f27aa7a5b/TestApp"
+folder_path = r"\\sirocco\wwwroot\lobo\Data\GliderVizData"
+# folder_path = r"https://github.com/Benwerb/PlotlyDashApps/tree/3401150177166a2a0234c9339782415f27aa7a5b/TestApp"
 files = [f for f in os.listdir(folder_path) if 'RT.txt' in f]
 
 
@@ -153,15 +154,6 @@ app.layout = dbc.Container([
         ], width=3)
     ], className="mb-3"),
 
-    # dbc.Row([
-    #     dbc.Col([
-    #         dcc.Graph(id='scatter-plot', style={'height': 'auto', 'width': 'auto'})
-    #     ], width=6),
-    #     dbc.Col([
-    #         dcc.Graph(id='map-plot', style={'height': 'auto', 'width': 'auto'})
-    #     ], width=6)
-    # ]),
-
     dbc.Row([
         dbc.Col([
             dcc.Graph(id='scatter-plot', style={'height': 'auto', 'width': 'auto'})
@@ -173,6 +165,12 @@ app.layout = dbc.Container([
             dcc.Graph(id='map-plot', style={'height': 'auto', 'width': 'auto'})
         ], width=6)
     ]),
+
+    dbc.Row([
+        dbc.Col([
+            dcc.Graph(id='contour-plot', style={'height': 'auto', 'width': 'auto'})  # New contour plot
+        ], width=6)
+]),
 
 ], fluid=True)
 
@@ -216,7 +214,9 @@ def toggle_profile_input(selected_filter):
     return selected_filter != 'profile'  # Disable input unless 'profile' is selected
 
 @callback(
-    [Output('scatter-plot', 'figure'), Output('map-plot', 'figure')],
+    [Output('scatter-plot', 'figure'), 
+     Output('map-plot', 'figure'),
+     Output('contour-plot', 'figure')],
     [Input('x-axis-dropdown', 'value'),
      Input('y-axis-dropdown', 'value'),
      Input('filter-method', 'value'),
@@ -270,9 +270,43 @@ def update_graph(x_column, y_column, filter_method, station_range, start_date, e
     )
     map_fig.update_layout(height=1000, width=1000)
 
-    return scatter_fig, map_fig
+    # Contour Figure
+    contour_fig = px.density_contour(
+        filtered_df, x="Date", y=y_column, z=x_column,
+        labels={"Date": "Date", y_column: y_column, x_column: x_column},
+        title=f"Contour Plot: {x_column} vs {y_column} over Time",
+        template="plotly_white",
+    )
+    contour_fig.update_yaxes(autorange="reversed")
+    contour_fig.update_layout(height=1000, width=1000)
+
+# Add depth filter and fix the contour plot
+
+#     # Ensure Date is converted to numerical format for contour plotting
+#     filtered_df["Date_Num"] = filtered_df["Date"].astype(int)  # Convert datetime to integer
+
+#     # Create a filled contour plot
+#     contour_fig = go.Figure(data=go.Contour(
+#         x=filtered_df["Date_Num"],  # X-axis: Date converted to numeric
+#         y=filtered_df[y_column],    # Y-axis: User-selected Y variable
+#         z=filtered_df[x_column],    # Z-axis: User-selected X variable (color data)
+#         colorscale="Viridis",  # 🎨 Choose a color scheme (e.g., "Plasma", "Cividis", "Turbo")
+#         contours=dict(showlabels=True),  # 🏷 Show contour labels
+#         showscale=True  # 📊 Display color scale
+# ))
+
+#     # Update layout to show proper axis labels
+#     contour_fig.update_layout(
+#         title=f"Contour Plot: {x_column} vs {y_column} over Time",
+#         xaxis_title="Date",
+#         yaxis_title=y_column,
+#         xaxis=dict(tickmode="array", tickvals=filtered_df["Date_Num"], ticktext=filtered_df["Date"].dt.strftime("%Y-%m-%d")),  # Convert back to readable dates
+#         template="plotly_white"
+# )
+
+    return scatter_fig, map_fig, contour_fig
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
-    # app.run(host='0.0.0.0', port=8050, debug=True)
+    # app.run(debug=True)
+    app.run(host='0.0.0.0', port=8050, debug=True)

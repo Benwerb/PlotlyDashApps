@@ -1,17 +1,20 @@
 % Define database connection parameters
-dbname = 'spraydabase';
+dbname = 'SprayData';
 username = 'spraydabase_user';
 password = '8pgy9Sba79ETgds8QcaycQj0U6uIhhwQ';
 host = 'dpg-cur2o7lds78s7384jthg-a'; % This could be a DSN (Data Source Name)
 port = 5432;
 
-% % Add the PostgreSQL JDBC driver to MATLAB Java path
-% % javaaddpath('path_to_postgresql_jdbc_driver/postgresql-<version>.jar');
-% 
-% jdbcUrl = sprintf('jdbc:postgresql://%s:%d/%s', host, port, dbname);
-% % Establish the database connection
-% conn = database(dbname, username, password, 'Vendor', 'PostgreSQL', 'Server', host, 'PortNumber', port, 'URL', jdbcUrl);
+jdbcDriver = 'org.postgresql.Driver';
+jdbcURL = ['jdbc:postgresql://' host ':' port '/' dbName];
 
-% opts = databaseConnectionOptions("jdbc","PostgreSQL")
-% postgresql(dbname,username,password)
+% Create database connection
+conn = database(dbName, username, password, jdbcDriver, jdbcURL);
 
+% Check if connection was successful
+if isopen(conn)
+    disp('Connection successful!');
+else
+    disp('Connection failed!');
+    disp(conn.Message);
+end
