@@ -31,9 +31,10 @@ df = load_latest_data(folder_path)
 station_min, station_max = df["Station"].min(), df["Station"].max()
 date_min, date_max = df["Date"].min(), df["Date"].max() 
 
-# Initialize the app with a Bootstrap theme
+# Initialize the app with a Bootstrap theme and add meta tag for phone screen optimization
 external_stylesheets = [dbc.themes.CERULEAN]
-app = Dash(__name__, external_stylesheets=external_stylesheets)
+app = Dash(__name__, external_stylesheets=external_stylesheets,
+           meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}])
 
 # Predefined dropdown options
 dropdown_options = [
@@ -130,6 +131,7 @@ app.layout = dbc.Container([
                 start_date=date_min,
                 end_date=date_max
             ),
+            html.Br(), # double break
             html.Br(),
             html.Label("Profile"),
             dcc.Input(
@@ -263,8 +265,8 @@ def update_graph(x_column, y_column, filter_method, station_range, start_date, e
     map_fig = px.scatter_map(
         filtered_df, lat="Lat [°N]", lon="Lon [°E]",
         hover_name="Station",
-        map_style="light",
-        zoom=6,
+        map_style="satellite",
+        zoom=10,
         color='Station',
         labels={"Station": "Profile"}
     )
@@ -280,29 +282,7 @@ def update_graph(x_column, y_column, filter_method, station_range, start_date, e
     contour_fig.update_yaxes(autorange="reversed")
     contour_fig.update_layout(height=1000, width=1000)
 
-# Add depth filter and fix the contour plot
-
-#     # Ensure Date is converted to numerical format for contour plotting
-#     filtered_df["Date_Num"] = filtered_df["Date"].astype(int)  # Convert datetime to integer
-
-#     # Create a filled contour plot
-#     contour_fig = go.Figure(data=go.Contour(
-#         x=filtered_df["Date_Num"],  # X-axis: Date converted to numeric
-#         y=filtered_df[y_column],    # Y-axis: User-selected Y variable
-#         z=filtered_df[x_column],    # Z-axis: User-selected X variable (color data)
-#         colorscale="Viridis",  # 🎨 Choose a color scheme (e.g., "Plasma", "Cividis", "Turbo")
-#         contours=dict(showlabels=True),  # 🏷 Show contour labels
-#         showscale=True  # 📊 Display color scale
-# ))
-
-#     # Update layout to show proper axis labels
-#     contour_fig.update_layout(
-#         title=f"Contour Plot: {x_column} vs {y_column} over Time",
-#         xaxis_title="Date",
-#         yaxis_title=y_column,
-#         xaxis=dict(tickmode="array", tickvals=filtered_df["Date_Num"], ticktext=filtered_df["Date"].dt.strftime("%Y-%m-%d")),  # Convert back to readable dates
-#         template="plotly_white"
-# )
+    # Add depth filter and fix the contour plot
 
     return scatter_fig, map_fig, contour_fig
 
