@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import Dash, html, dcc
+from dash import Dash, html, dash_table, dcc, callback, Output, Input, State
 import pandas as pd
 import plotly.express as px
 import os
@@ -73,10 +73,22 @@ app.layout = dbc.Container([
         dbc.Col(dbc.Card([
             dbc.CardBody([
                 html.Label("Select Deployment:"),
-                dcc.Dropdown(files, files[-1], id='Deployment-Dropdown', clearable=True)
+                dcc.Dropdown(files, files[-1], id='Deployment-Dropdown', clearable=True),
+                html.Div(id="file-output")  # Output container
             ])
         ]), width=4)
     ], className="mb-3"),
+
+    # dbc.Row([
+    #     dbc.Col(
+    #         dbc.Card([
+    #             dbc.CardBody([
+    #                 html.Div(id="file-output")  # Output container
+    #             ])
+    #         ])
+    #     )
+    # ]),
+
     
     dbc.Row([
         dbc.Col(dbc.Card([
@@ -85,11 +97,11 @@ app.layout = dbc.Container([
                 dcc.RadioItems(
                     id='filter-method',
                     options=[
+                        {'label': 'Filter by Profile', 'value': 'profile'},
                         {'label': 'Filter by Profile Range', 'value': 'station'},
-                        {'label': 'Filter by Date', 'value': 'date'},
-                        {'label': 'Filter by Profile', 'value': 'profile'}
+                        {'label': 'Filter by Date', 'value': 'date'}
                     ],
-                    value='station',
+                    value='profile',
                     inline=False
                 )
             ])
@@ -112,6 +124,22 @@ app.layout = dbc.Container([
         ]), width=4)
     ], className="mb-3"),
     
+    dbc.Row([
+        dbc.Col(dbc.Card([
+            dbc.CardBody([
+                html.Label("Profile:"),
+                dcc.Input(
+                    id='profile-number',
+                    type='number',
+                    min=station_min,
+                    max=station_max,
+                    placeholder=station_max,
+                    value=station_max
+                )
+            ])
+        ]), width=8)
+    ], className="mb-3"),
+
     dbc.Row([
         dbc.Col(dbc.Card([
             dbc.CardBody([
@@ -140,102 +168,196 @@ app.layout = dbc.Container([
             ])
         ]), width=8)
     ], className="mb-3"),
-
-        dbc.Row([
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                html.Label("Profile:"),
-                dcc.Input(
-                    id='profile-number',
-                    type='number',
-                    min=station_min,
-                    max=station_max,
-                    placeholder=station_max,
-                    value=station_max
-                )
-            ])
-        ]), width=8)
-    ], className="mb-3"),
+    
+    
+    dbc.Row([
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='map-plot', style={'height': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-pH', style={'height': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-chla', style={'height': '500px'})])]), width=4),
+    ]),
+    dbc.Row([
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-Temperature', style={'height': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-Salinity', style={'height': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-Doxy', style={'height': '500px'})])]), width=4),
+    ]),
     
     dbc.Row([
         dbc.Col(dbc.Card([
             dbc.CardBody([
                 html.Label("Select X-axis:"),
-                dcc.Dropdown(id='x-axis-dropdown', options=dropdown_options, value="Temperature", clearable=False)
+                dcc.Dropdown(id='x-axis-dropdown', options=dropdown_options, value="pH25C_1atm[Total]", clearable=False)
             ])
         ]), width=4),
         
         dbc.Col(dbc.Card([
             dbc.CardBody([
                 html.Label("Select Y-axis:"),
-                dcc.Dropdown(id='y-axis-dropdown', options=dropdown_options, value="Salinity", clearable=False)
+                dcc.Dropdown(id='y-axis-dropdown', options=dropdown_options, value="Depth[m]", clearable=False)
             ])
         ]), width=4)
     ], className="mb-3"),
-    
+
     dbc.Row([
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                dcc.Graph(id='scatter-plot', style={'height': '500px'})
-            ])
-        ]), width=6),
-        
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                dcc.Graph(id='map-plot', style={'height': '500px'})
-            ])
-        ]), width=6)
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-xy', style={'height': '1500px', 'width': '1500px'})])]), width=12),
     ]),
-    
-    dbc.Row([
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                dcc.Graph(id='contour-plot', style={'height': '500px'})
-            ])
-        ]), width=12)
-    ])
+
 ], fluid=True)
 
 
 
-# # Dynamically load file
-# @callback(
-#     [Output('file-output', 'children'),
-#      Output('station-range-slider', 'min'),
-#      Output('station-range-slider', 'max'),
-#      Output('station-range-slider', 'value'),
-#      Output('date-picker-range', 'min_date_allowed'),
-#      Output('date-picker-range', 'max_date_allowed'),
-#      Output('date-picker-range', 'start_date'),
-#      Output('date-picker-range', 'end_date')],
-#     Input('Deployment-Dropdown', 'value')
-# )
-# def update_file(selected_file):
-
-#     df = load_latest_data(folder_path,selected_file)
-
-#     # Get new min/max values for filters
-#     station_min, station_max = df["Station"].min(), df["Station"].max()
-#     date_min, date_max = df["Date"].min(), df["Date"].max()
-
-#     # Return updated values for filters
-#     return f"Loaded: {selected_file}", station_min, station_max, [station_min, station_max], date_min, date_max, date_min, date_max
 
 
-# @callback(
-#     [Output('station-range-slider', 'disabled'),
-#      Output('date-picker-range', 'disabled')],
-#     Input('filter-method', 'value')
-# )
-# def toggle_filters(selected_filter):
-#     return selected_filter != 'station', selected_filter != 'date'
+# Dynamically load file
+@callback(
+    [Output('station-range-slider', 'min'),
+     Output('station-range-slider', 'max'),
+     Output('station-range-slider', 'value'),
+     Output('date-picker-range', 'min_date_allowed'),
+     Output('date-picker-range', 'max_date_allowed'),
+     Output('date-picker-range', 'start_date'),
+     Output('date-picker-range', 'end_date')],
+    Input('Deployment-Dropdown', 'value')
+)
+def update_file(selected_file):
 
-# @callback(
-#     Output('profile-number', 'disabled'),
-#     Input('filter-method', 'value')
-# )
-# def toggle_profile_input(selected_filter):
-#     return selected_filter != 'profile'  # Disable input unless 'profile' is selected
+    df = load_latest_data(folder_path,selected_file)
+
+    # Get new min/max values for filters
+    station_min, station_max = df["Station"].min(), df["Station"].max()
+    date_min, date_max = df["Date"].min(), df["Date"].max()
+
+    # Return updated values for filters
+    return station_min, station_max, [station_min, station_max], date_min, date_max, date_min, date_max
+
+
+@callback(
+    [Output('station-range-slider', 'disabled'),
+     Output('date-picker-range', 'disabled')],
+    Input('filter-method', 'value')
+)
+def toggle_filters(selected_filter):
+    return selected_filter != 'station', selected_filter != 'date'
+
+@callback(
+    Output('profile-number', 'disabled'),
+    Input('filter-method', 'value')
+)
+def toggle_profile_input(selected_filter):
+    return selected_filter != 'profile'  # Disable input unless 'profile' is selected
+
+
+
+@callback(
+    [Output('map-plot','figure'),
+     Output('scatter-plot-pH','figure'),
+     Output('scatter-plot-chla','figure'),
+     Output('scatter-plot-Temperature','figure'),
+     Output('scatter-plot-Salinity','figure'),
+     Output('scatter-plot-Doxy','figure'),
+     Output('scatter-plot-xy','figure')],
+    [Input('filter-method', 'value'),
+     Input('station-range-slider', 'value'),
+     Input('date-picker-range', 'start_date'),
+     Input('date-picker-range', 'end_date'),
+     Input('profile-number', 'value'),
+     Input('data-quality', 'value'),
+     Input('x-axis-dropdown', 'value'),
+     Input('y-axis-dropdown', 'value'),
+     State('Deployment-Dropdown', 'value')]
+)
+
+def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, selected_file):
+
+    df = load_latest_data(folder_path, selected_file)
+
+    # Identify QF columns (columns immediately following measured values)
+    qf_columns = [col for col in df.columns if 'QF' in col]
+
+    # Apply Data Quality filter
+    if data_quality == "good":
+        df = df[(df[qf_columns] == 0).all(axis=1)]
+    elif data_quality == "good_questionable":
+        df = df[(df[qf_columns].isin([0, 4])).all(axis=1)]
+
+    # Apply filter based on the selected method
+    if filter_method == 'station':  # Profile Range
+        filtered_df = df[(df["Station"] >= station_range[0]) & (df["Station"] <= station_range[1])]
+    elif filter_method == 'date':  # Date Range
+        filtered_df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
+    else:  # Profile number
+        filtered_df = df[df["Station"] == profile_number] if profile_number is not None else df
+
+
+    # Map Plot
+    map_fig = px.scatter_map(
+        filtered_df, lat="Lat [°N]", lon="Lon [°E]",
+        hover_name="Station",
+        map_style="satellite",
+        zoom=8,
+        color='Station'
+        # labels={"Station": "Profile"}
+    )
+    # map_fig.update_layout(height=500, width=500)
+
+    # Scatter Plot pH25 - CanB
+    scatter_fig_pH25 = px.scatter(
+        filtered_df, x="pH25C_1atm[Total]", y="Depth[m]",
+        labels={"pH25C_1atm[Total]", "Depth[m]", "Profile"},
+        title=f"pH25C_1atm[Total] vs. Depth[m]",
+        template="plotly_white",
+        color='Station'
+    )
+    scatter_fig_pH25.update_yaxes(autorange="reversed")
+    # scatter_fig.update_layout(height=1000, width=1000)
+
+
+    scatter_fig_Chla = px.scatter(
+        filtered_df, x="Chl_a[mg/m^3]", y="Depth[m]",
+        labels={"Chl_a[mg/m^3]", "Depth[m]", "Profile"},
+        title=f"Chl_a[mg/m^3] vs. Depth[m]",
+        template="plotly_white",
+        color='Station'
+    )
+    scatter_fig_Chla.update_yaxes(autorange="reversed")
+
+
+    scatter_fig_Temperature = px.scatter(
+        filtered_df, x="Temperature[°C]", y="Depth[m]",
+        labels={"Temperature[°C]", "Depth[m]", "Profile"},
+        title=f"Temperature[°C] vs. Depth[m]",
+        template="plotly_white",
+        color='Station'
+    )
+    scatter_fig_Temperature.update_yaxes(autorange="reversed")
+
+    scatter_fig_Salinity = px.scatter(
+        filtered_df, x="Salinity[pss]", y="Depth[m]",
+        labels={"Salinity[pss]", "Depth[m]", "Profile"},
+        title=f"Salinity[pss] vs. Depth[m]",
+        template="plotly_white",
+        color='Station'
+    )
+    scatter_fig_Salinity.update_yaxes(autorange="reversed")
+
+    scatter_fig_Doxy = px.scatter(
+        filtered_df, x="Oxygen[µmol/kg]", y="Depth[m]",
+        labels={"Oxygen[µmol/kg]", "Depth[m]", "Profile"},
+        title=f"Oxygen[µmol/kg] vs. Depth[m]",
+        template="plotly_white",
+        color='Station'
+    )
+    scatter_fig_Doxy.update_yaxes(autorange="reversed")
+
+    scatter_fig_xy = px.scatter(
+        filtered_df, x=x_column, y=y_column,
+        labels={x_column: x_column, y_column: y_column, "Station": "Profile"},
+        title=f"{x_column} vs. {y_column}",
+        template="plotly_white",
+        color='Station'
+    )
+    scatter_fig_xy.update_yaxes(autorange="reversed")
+
+    return map_fig, scatter_fig_pH25, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, scatter_fig_xy
 
 # @callback(
 #     [Output('scatter-plot', 'figure'), 
@@ -309,4 +431,4 @@ app.layout = dbc.Container([
 #     return scatter_fig, map_fig, contour_fig
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8050, debug=True)
+    app.run(debug=True)
