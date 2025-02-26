@@ -9,8 +9,8 @@ import plotly.graph_objects as go
 # Hardcode path to files and create list
 folder_path = r"\\sirocco\wwwroot\lobo\Data\GliderVizData"
 # folder_path = r"https://github.com/Benwerb/PlotlyDashApps/tree/3401150177166a2a0234c9339782415f27aa7a5b/TestApp"
-files = [f for f in os.listdir(folder_path) if 'RT.txt' in f]
-
+# files = [f for f in os.listdir(folder_path) if 'RT.txt' in f]
+files = [f for f in os.listdir(folder_path) if 'RT.TXT'.lower() in f.lower()] # lower case
 
 # Load and clean data
 def load_latest_data(folder_path, selected_file=None):
