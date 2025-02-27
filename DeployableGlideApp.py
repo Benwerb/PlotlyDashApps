@@ -6,6 +6,7 @@ import os
 import plotly.graph_objects as go
 from sqlalchemy import create_engine 
 from sqlalchemy import inspect
+import psycopg2
 
 db_url = "postgresql://spraydabase_user:8pgy9Sba79ETgds8QcaycQj0U6uIhhwQ@dpg-cur2o7lds78s7384jthg-a.oregon-postgres.render.com/spraydabase"
 engine = create_engine(db_url)
