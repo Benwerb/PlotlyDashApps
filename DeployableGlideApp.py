@@ -22,6 +22,7 @@ date_min, date_max = df["Date"].min(), df["Date"].max()
 # Initialize the app with a Bootstrap theme
 external_stylesheets = [dbc.themes.CERULEAN]
 app = Dash(__name__, external_stylesheets=external_stylesheets)
+server = app.server # Required for Gunicorn
 
 # Predefined dropdown options
 dropdown_options = [
