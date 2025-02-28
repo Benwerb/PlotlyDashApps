@@ -17,6 +17,7 @@ def load_latest_data(folder_path, selected_file=None):
     """Loads the latest RT.txt file, cleans it, and returns a DataFrame."""
 
     filename = os.path.join(folder_path, folder_path, selected_file if selected_file else files[-1])
+    
     df = pd.read_csv(filename, delimiter="\t", skiprows=6)
 
     # Clean data
@@ -176,7 +177,29 @@ app.layout = dbc.Container([
 
 ], fluid=True)
 
-# Dynamically load file
+# # Dynamically load file
+# @callback(
+#     [Output('file-output', 'children'),
+#      Output('station-range-slider', 'min'),
+#      Output('station-range-slider', 'max'),
+#      Output('station-range-slider', 'value'),
+#      Output('date-picker-range', 'min_date_allowed'),
+#      Output('date-picker-range', 'max_date_allowed'),
+#      Output('date-picker-range', 'start_date'),
+#      Output('date-picker-range', 'end_date')],
+#     Input('Deployment-Dropdown', 'value')
+# )
+# def update_file(selected_file):
+
+#     df = load_latest_data(folder_path,selected_file)
+
+#     # Get new min/max values for filters
+#     station_min, station_max = df["Station"].min(), df["Station"].max()
+#     date_min, date_max = df["Date"].min(), df["Date"].max()
+
+#     # Return updated values for filters
+#     return f"Loaded: {selected_file}", station_min, station_max, [station_min, station_max], date_min, date_max, date_min, date_max
+
 @callback(
     [Output('file-output', 'children'),
      Output('station-range-slider', 'min'),
@@ -189,15 +212,22 @@ app.layout = dbc.Container([
     Input('Deployment-Dropdown', 'value')
 )
 def update_file(selected_file):
+    if not selected_file:
+        return "No file selected", dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
-    df = load_latest_data(folder_path,selected_file)
+    df = load_latest_data(folder_path, selected_file)
+
+    if df.empty:
+        return f"Error loading {selected_file}", dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
     # Get new min/max values for filters
     station_min, station_max = df["Station"].min(), df["Station"].max()
     date_min, date_max = df["Date"].min(), df["Date"].max()
 
-    # Return updated values for filters
-    return f"Loaded: {selected_file}", station_min, station_max, [station_min, station_max], date_min, date_max, date_min, date_max
+    return (f"Loaded: {selected_file}", 
+            station_min, station_max, [station_min, station_max], 
+            date_min, date_max, date_min, date_max)
+
 
 
 @callback(
@@ -288,5 +318,5 @@ def update_graph(x_column, y_column, filter_method, station_range, start_date, e
 
 
 if __name__ == '__main__':
-    # app.run(debug=True)
-    app.run(host='0.0.0.0', port=8050, debug=True)
+    app.run(debug=True)
+    # app.run(host='0.0.0.0', port=8050, debug=True)
