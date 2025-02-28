@@ -23,7 +23,7 @@ def load_latest_data(folder_path, selected_file=None):
     # Clean data
     df.replace(-1e10, pd.NA, inplace=True)
     df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
-
+    
     return df
 
 df = load_latest_data(folder_path)
