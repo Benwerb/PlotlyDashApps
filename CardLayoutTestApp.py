@@ -22,6 +22,7 @@ def load_latest_data(folder_path, selected_file=None):
     df.replace(-1e10, pd.NA, inplace=True)
     df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
     df['Datetime'] = pd.to_datetime(df['mon/day/yr'] + ' ' + df['hh:mm'], format='%m/%d/%Y %H:%M')
+    df['pHin_Canb_Delta'] = df['pHinsitu[Total]'] - df['PHIN_CANYONB[Total]']
     return df
 
 df = load_latest_data(folder_path)
@@ -166,10 +167,13 @@ app.layout = dbc.Container([
         ]), width=8)
     ], className="mb-3"),
     
-    
     dbc.Row([
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='map-plot', style={'height': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='map-plot', style={'height': '1000px','width': '1000px'})])]), width=8),
+    ]),
+
+    dbc.Row([
         dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-pH', style={'height': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-pH-delta', style={'height': '500px'})])]), width=4),
         dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-chla', style={'height': '500px'})])]), width=4),
     ]),
     dbc.Row([
@@ -257,11 +261,10 @@ def update_profile_number(selected_file):
 def toggle_profile_input(selected_filter):
     return selected_filter != 'profile'  # Disable input unless 'profile' is selected
 
-
-
 @callback(
     [Output('map-plot','figure'),
      Output('scatter-plot-pH','figure'),
+     Output('scatter-plot-pH-delta','figure'),
      Output('scatter-plot-chla','figure'),
      Output('scatter-plot-Temperature','figure'),
      Output('scatter-plot-Salinity','figure'),
@@ -311,7 +314,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     )
     # map_fig.update_layout(height=500, width=500)
 
-    # Scatter Plot pH25 - CanB
+    # Scatter Plot pH25atm
     scatter_fig_pH25 = px.scatter(
         filtered_df, x="pH25C_1atm[Total]", y="Depth[m]",
         labels={"pH25C_1atm[Total]", "Depth[m]", "Profile"},
@@ -322,6 +325,16 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     scatter_fig_pH25.update_yaxes(autorange="reversed")
     # scatter_fig.update_layout(height=1000, width=1000)
 
+    scatter_fig_pHin_delta = px.scatter(
+        filtered_df, x="pHin_Canb_Delta", y="Depth[m]",
+        labels={"pHin - pHin_Canb", "Depth[m]", "Profile"},
+        title=f"pHin - pHin_Canb vs. Depth[m]",
+        template="plotly_white",
+        color='Station'
+    )
+    scatter_fig_pH25.update_yaxes(autorange="reversed")
+    x_max = max(abs(filtered_df["pHin_Canb_Delta"].max()), abs(filtered_df["pHin_Canb_Delta"].min()))
+    scatter_fig_pHin_delta.update_xaxes(range=[-x_max, x_max])
 
     scatter_fig_Chla = px.scatter(
         filtered_df, x="Chl_a[mg/m^3]", y="Depth[m]",
@@ -421,7 +434,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
 
 
 
-    return map_fig, scatter_fig_pH25, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, scatter_fig_xy
+    return map_fig, scatter_fig_pH25, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, scatter_fig_xy
 
 if __name__ == '__main__':
     # app.run(debug=True)
