@@ -12,7 +12,9 @@ db_url = "postgresql://spraydabase_user:8pgy9Sba79ETgds8QcaycQj0U6uIhhwQ@dpg-cur
 engine = create_engine(db_url)
 inspector = inspect(engine)
 files = inspector.get_table_names()
-df = pd.read_sql('SELECT * FROM "RT25202901"', engine) #double quotes needed for case-sensitive or numeric names
+latest_table = f'"{files[-1]}"'  # Add double quotes for case-sensitive or numeric table names
+query = f'SELECT * FROM {latest_table}'
+df = pd.read_sql(query, engine) #double quotes needed for case-sensitive or numeric names
 
 # Get min/max values for filters
 station_min, station_max = df["Station"].min(), df["Station"].max()
@@ -155,10 +157,13 @@ app.layout = dbc.Container([
         ]), width=8)
     ], className="mb-3"),
     
-    
     dbc.Row([
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='map-plot', style={'height': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='map-plot', style={'height': '1000px','width': '1000px'})])]), width=8),
+    ]),
+
+    dbc.Row([
         dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-pH', style={'height': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-pH-delta', style={'height': '500px'})])]), width=4),
         dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-chla', style={'height': '500px'})])]), width=4),
     ]),
     dbc.Row([
@@ -213,7 +218,7 @@ app.layout = dbc.Container([
 def update_file(selected_file):
 
     # df = load_latest_data(folder_path,selected_file)
-    df = pd.read_sql('SELECT * FROM "RT25202901"', engine) #double quotes needed for case-sensitive or numeric names. Change to selected file.
+    df = pd.read_sql(query, engine) #double quotes needed for case-sensitive or numeric names. Change to selected file.
 
 
     # Get new min/max values for filters
@@ -225,8 +230,8 @@ def update_file(selected_file):
 
 
 @callback(
-    [Output('station-range-slider', 'disabled'),
-     Output('date-picker-range', 'disabled')],
+    [Output('station-range-slider', 'enabled'),
+     Output('date-picker-range', 'enabled')],
     Input('filter-method', 'value')
 )
 def toggle_filters(selected_filter):
@@ -238,7 +243,7 @@ def toggle_filters(selected_filter):
 )
 def update_profile_number(selected_file):
     # df = load_latest_data(folder_path, selected_file)
-    df = pd.read_sql('SELECT * FROM "RT25202901"', engine) #double quotes needed for case-sensitive or numeric names
+    df = pd.read_sql(query, engine) #double quotes needed for case-sensitive or numeric names
 
     
     if df.empty:
@@ -255,6 +260,7 @@ def toggle_profile_input(selected_filter):
 @callback(
     [Output('map-plot','figure'),
      Output('scatter-plot-pH','figure'),
+     Output('scatter-plot-pH-delta','figure'),
      Output('scatter-plot-chla','figure'),
      Output('scatter-plot-Temperature','figure'),
      Output('scatter-plot-Salinity','figure'),
@@ -273,9 +279,7 @@ def toggle_profile_input(selected_filter):
 
 def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, selected_file):
 
-    # df = load_latest_data(folder_path, selected_file)
-    df = pd.read_sql('SELECT * FROM "RT25202901"', engine) #double quotes needed for case-sensitive or numeric names
-
+    df = load_latest_data(folder_path, selected_file)
 
     # Identify QF columns (columns immediately following measured values)
     qf_columns = [col for col in df.columns if 'QF' in col]
@@ -306,7 +310,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     )
     # map_fig.update_layout(height=500, width=500)
 
-    # Scatter Plot pH25 - CanB
+    # Scatter Plot pH25atm
     scatter_fig_pH25 = px.scatter(
         filtered_df, x="pH25C_1atm[Total]", y="Depth[m]",
         labels={"pH25C_1atm[Total]", "Depth[m]", "Profile"},
@@ -317,6 +321,16 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     scatter_fig_pH25.update_yaxes(autorange="reversed")
     # scatter_fig.update_layout(height=1000, width=1000)
 
+    scatter_fig_pHin_delta = px.scatter(
+        filtered_df, x="pHin_Canb_Delta", y="Depth[m]",
+        labels={"pHin - pHin_Canb", "Depth[m]", "Profile"},
+        title=f"pHin - pHin_Canb vs. Depth[m]",
+        template="plotly_white",
+        color='Station'
+    )
+    scatter_fig_pH25.update_yaxes(autorange="reversed")
+    x_max = max(abs(filtered_df["pHin_Canb_Delta"].max()), abs(filtered_df["pHin_Canb_Delta"].min()))
+    scatter_fig_pHin_delta.update_xaxes(range=[-x_max, x_max])
 
     scatter_fig_Chla = px.scatter(
         filtered_df, x="Chl_a[mg/m^3]", y="Depth[m]",
@@ -416,7 +430,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
 
 
 
-    return map_fig, scatter_fig_pH25, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, scatter_fig_xy
+    return map_fig, scatter_fig_pH25, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, scatter_fig_xy
 
 if __name__ == '__main__':
     # app.run(debug=True)
