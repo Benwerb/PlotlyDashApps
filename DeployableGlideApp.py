@@ -183,7 +183,7 @@ app.layout = dbc.Container([
                     value="pH25C_1atm[Total]", 
                     clearable=False)
             ])
-        ]), width=4),
+        ]), width=3),
         
         dbc.Col(dbc.Card([
             dbc.CardBody([
@@ -191,11 +191,23 @@ app.layout = dbc.Container([
                 dcc.Dropdown(
                     id='y-axis-dropdown', 
                     options=[{'label': col, 'value': col} for col in df.columns if 'QF' not in col], 
-                    # multi=True,
+                    multi=True,
                     value="Depth[m]", 
                     clearable=False)
             ])
-        ]), width=4)
+        ]), width=3),
+
+        dbc.Col(dbc.Card([
+            dbc.CardBody([
+                html.Label("X-Y MULTI"),
+                dcc.Dropdown(
+                    id='Select-Multi-Axis', 
+                    options=[{'label': 'x-axis', 'value': 'x-axis'}, {'label': 'y-axis', 'value': 'y-axis'}], 
+                    value="x-axis", 
+                    clearable=False)
+            ])
+        ]), width=3)
+
     ], className="mb-3"),
 
     dbc.Row([
@@ -274,13 +286,14 @@ def toggle_profile_input(selected_filter):
      Input('data-quality', 'value'),
      Input('x-axis-dropdown', 'value'),
      Input('y-axis-dropdown', 'value'),
+     Input('Select-Multi-Axis','value'),
      State('Deployment-Dropdown', 'value')]
 )
 
-def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, selected_file):
+def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, MultiAxis ,selected_file):
 
-    df = load_latest_data(folder_path, selected_file)
-
+    # df = load_latest_data(folder_path, selected_file)
+    df = pd.read_sql(query, engine) #double quotes needed for case-sensitive or numeric names
     # Identify QF columns (columns immediately following measured values)
     qf_columns = [col for col in df.columns if 'QF' in col]
 
@@ -322,14 +335,14 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     # scatter_fig.update_layout(height=1000, width=1000)
 
     scatter_fig_pHin_delta = px.scatter(
-        filtered_df, x="pHin_Canb_Delta", y="Depth[m]",
+        filtered_df, x="PHIN_CANB_DELTA", y="Depth[m]",
         labels={"pHin - pHin_Canb", "Depth[m]", "Profile"},
         title=f"pHin - pHin_Canb vs. Depth[m]",
         template="plotly_white",
         color='Station'
     )
-    scatter_fig_pH25.update_yaxes(autorange="reversed")
-    x_max = max(abs(filtered_df["pHin_Canb_Delta"].max()), abs(filtered_df["pHin_Canb_Delta"].min()))
+    scatter_fig_pHin_delta.update_yaxes(autorange="reversed")
+    x_max = max(abs(filtered_df["PHIN_CANB_DELTA"].max()), abs(filtered_df["PHIN_CANB_DELTA"].min()))
     scatter_fig_pHin_delta.update_xaxes(range=[-x_max, x_max])
 
     scatter_fig_Chla = px.scatter(
@@ -379,51 +392,96 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     # scatter_fig_xy.update_yaxes(autorange="reversed")
 
     scatter_fig_xy = go.Figure()
+    if MultiAxis == 'x-axis':
+        # Ensure x_column is always a list
+        if isinstance(x_column, str):
+            x_columns = [x_column]  # Convert single selection to list
+        else:
+            x_columns = x_column  # Already a list
 
-    # Ensure x_column is always a list
-    if isinstance(x_column, str):
-        x_columns = [x_column]  # Convert single selection to list
-    else:
-        x_columns = x_column  # Already a list
+        # Filter out any x-columns not in the DataFrame
+        valid_x_columns = [x for x in x_columns if x in filtered_df.columns]
 
-    # Filter out any x-columns not in the DataFrame
-    valid_x_columns = [x for x in x_columns if x in filtered_df.columns]
+        if not valid_x_columns:
+            raise ValueError("No valid x-axis columns found in the selected data.")
 
-    if not valid_x_columns:
-        raise ValueError("No valid x-axis columns found in the selected data.")
+        # Iterate over valid x-columns and add traces with separate x-axes
+        for i, x_col in enumerate(valid_x_columns):
+            xaxis_name = "x" if i == 0 else f"x{i+1}"  # First axis is "x", others are "x2", "x3", etc.
 
-    # Iterate over valid x-columns and add traces with separate x-axes
-    for i, x_col in enumerate(valid_x_columns):
-        xaxis_name = "x" if i == 0 else f"x{i+1}"  # First axis is "x", others are "x2", "x3", etc.
+            scatter_fig_xy.add_trace(go.Scatter(
+                x=filtered_df[x_col],
+                y=filtered_df[y_column],
+                mode='markers',
+                name=x_col,  # Legend entry for each x-column
+                xaxis=xaxis_name  # Assign to respective x-axis
+            ))
 
-        scatter_fig_xy.add_trace(go.Scatter(
-            x=filtered_df[x_col],
-            y=filtered_df[y_column],
-            mode='markers',
-            name=x_col,  # Legend entry for each x-column
-            xaxis=xaxis_name  # Assign to respective x-axis
-        ))
-
-    # Define layout with multiple x-axes
-    layout = {
-        "title": f"{', '.join(valid_x_columns)} vs. {y_column}",
-        "yaxis": {"title": y_column, "autorange": "reversed"},
-        "xaxis": {"title": valid_x_columns[0]},  # Primary x-axis
-    }
-
-    # Add additional x-axes dynamically
-    for i, x_col in enumerate(valid_x_columns[1:], start=2):
-        layout[f"xaxis{i}"] = {
-            "title": x_col,
-            "anchor":"free",
-            "overlaying": "x",  # Overlay on the same plot
-            # "side": "top" if i % 2 == 0 else "bottom",  # Alternate positions
-            "side": "bottom",
-            "position": i * .1,  # Offset each x-axis by 5% of the plot width
-            "showgrid": False,  # Hide grid for additional x-axes
-            # "tickangle": 45 if i % 2 == 0 else -45  # Tilt ticks for legibility
-            "tickmode":"sync",
+        # Define layout with multiple x-axes
+        layout = {
+            "title": f"{', '.join(valid_x_columns)} vs. {y_column}",
+            "yaxis": {"title": y_column, "autorange": "reversed"},
+            "xaxis": {"title": valid_x_columns[0]},  # Primary x-axis
         }
+
+        # Add additional x-axes dynamically
+        for i, x_col in enumerate(valid_x_columns[1:], start=2):
+            layout[f"xaxis{i}"] = {
+                "title": x_col,
+                "anchor":"free",
+                "overlaying": "x",  # Overlay on the same plot
+                # "side": "top" if i % 2 == 0 else "bottom",  # Alternate positions
+                "side": "bottom",
+                "position": i * .1,  # Offset each x-axis by 5% of the plot width
+                "showgrid": False,  # Hide grid for additional x-axes
+                # "tickangle": 45 if i % 2 == 0 else -45  # Tilt ticks for legibility
+                "tickmode":"sync",
+            }
+
+    elif MultiAxis == 'y-axis':
+        # Ensure y_column is always a list
+        if isinstance(y_column, str):
+            y_columns = [y_column]  # Convert single selection to list
+        else:
+            y_columns = y_column  # Already a list
+
+        # Filter out any x-columns not in the DataFrame
+        valid_y_columns = [y for y in y_columns if y in filtered_df.columns]
+
+        if not valid_y_columns:
+            raise ValueError("No valid y-axis columns found in the selected data.")
+
+        # Iterate over valid y-columns and add traces with separate x-axes
+        for i, y_col in enumerate(valid_y_columns):
+            yaxis_name = "y" if i == 0 else f"y{i+1}"  # First axis is "y", others are "y2", "y3", etc.
+
+            scatter_fig_xy.add_trace(go.Scatter(
+                x=filtered_df[x_column],
+                y=filtered_df[y_col],
+                mode='markers',
+                name=y_col,  # Legend entry for each x-column
+                yaxis=yaxis_name  # Assign to respective x-axis
+            ))
+
+        # Define layout with multiple x-axes
+        layout = {
+            "title": f"{', '.join(x_column)} vs. {valid_y_columns}",
+            "yaxis": {"title": valid_y_columns, "autorange": "reversed"},
+            "xaxis": {"title": valid_y_columns[0]},  # Primary y-axis
+        }
+
+        # Add additional y-axes dynamically
+        for i, y_col in enumerate(valid_y_columns[1:], start=2):
+            layout[f"yaxis{i}"] = {
+                "title": y_col,
+                "anchor":"free",
+                "overlaying": "y",  # Overlay on the same plot
+                "side": "left",
+                "position": i * .1,  # Offset each x-axis by 5% of the plot width
+                "showgrid": False,  # Hide grid for additional x-axes
+                # "tickangle": 45 if i % 2 == 0 else -45  # Tilt ticks for legibility
+                "tickmode":"sync",
+            }
 
     scatter_fig_xy.update_layout(layout, template="plotly_white")
 
