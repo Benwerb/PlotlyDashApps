@@ -219,6 +219,7 @@ app.layout = dbc.Container([
     [Output('station-range-slider', 'min'),
      Output('station-range-slider', 'max'),
      Output('station-range-slider', 'value'),
+     Output('station-range-slider', 'marks'),
      Output('date-picker-range', 'min_date_allowed'),
      Output('date-picker-range', 'max_date_allowed'),
      Output('date-picker-range', 'start_date'),
@@ -232,9 +233,9 @@ def update_file(selected_file):
     # Get new min/max values for filters
     station_min, station_max = df["Station"].min(), df["Station"].max()
     date_min, date_max = df["Date"].min(), df["Date"].max()
-
+    new_marks = {int(i): str(int(i)) for i in range(int(station_min), int(station_max) + 1, 5)}
     # Return updated values for filters
-    return station_min, station_max, [station_min, station_max], date_min, date_max, date_min, date_max
+    return station_min, station_max, [station_min, station_max], new_marks, date_min, date_max, date_min, date_max
 
 
 @callback(
@@ -247,6 +248,8 @@ def toggle_filters(selected_filter):
 
 @callback(
     Output('profile-number', 'value'),
+    Output('profile-number','min'),
+    Output('profile-number','max'),
     Input('Deployment-Dropdown', 'value')
 )
 def update_profile_number(selected_file):
@@ -256,7 +259,8 @@ def update_profile_number(selected_file):
         return None
 
     station_max = df["Station"].max()
-    return station_max  # Set to the max station of the new file
+    station_min = df["Station"].min()
+    return station_max, station_min, station_max  # Set to the max station of the new file
 
 def toggle_profile_input(selected_filter):
     return selected_filter != 'profile'  # Disable input unless 'profile' is selected
@@ -332,7 +336,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
         template="plotly_white",
         color='Station'
     )
-    scatter_fig_pH25.update_yaxes(autorange="reversed")
+    scatter_fig_pHin_delta.update_yaxes(autorange="reversed")
     x_max = max(abs(filtered_df["pHin_Canb_Delta"].max()), abs(filtered_df["pHin_Canb_Delta"].min()))
     scatter_fig_pHin_delta.update_xaxes(range=[-x_max, x_max])
 
