@@ -96,11 +96,11 @@ app.layout = dbc.Container([
                 dcc.RadioItems(
                     id='filter-method',
                     options=[
-                        {'label': 'Filter by Profile', 'value': 'profile'},
                         {'label': 'Filter by Profile Range', 'value': 'station'},
+                        {'label': 'Filter by Profile', 'value': 'profile'},
                         {'label': 'Filter by Date', 'value': 'date'}
                     ],
-                    value='profile',
+                    value='station',
                     inline=False
                 )
             ])
@@ -122,7 +122,21 @@ app.layout = dbc.Container([
             ])
         ]), width=4)
     ], className="mb-3"),
-    
+# max(station_min, station_max - 10)
+    dbc.Row([
+        dbc.Col(dbc.Card([
+            dbc.CardBody([
+                html.Label("Station Range:"),
+                dcc.RangeSlider(
+                    min=station_min, max=station_max, step=1,
+                    marks={int(i): str(int(i)) for i in range(int(station_min), int(station_max) + 1, 10)},
+                    value=[station_min, station_max],
+                    id='station-range-slider'
+                )
+            ])
+        ]), width=8)
+    ], className="mb-3"),
+
     dbc.Row([
         dbc.Col(dbc.Card([
             dbc.CardBody([
@@ -139,19 +153,6 @@ app.layout = dbc.Container([
         ]), width=8)
     ], className="mb-3"),
 
-    dbc.Row([
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                html.Label("Station Range:"),
-                dcc.RangeSlider(
-                    min=station_min, max=station_max, step=1,
-                    marks={int(i): str(int(i)) for i in range(int(station_min), int(station_max) + 1, 5)},
-                    value=[station_min, station_max],
-                    id='station-range-slider'
-                )
-            ])
-        ]), width=8)
-    ], className="mb-3"),
 
     dbc.Row([
         dbc.Col(dbc.Card([
@@ -192,7 +193,7 @@ app.layout = dbc.Container([
                     options=[{'label': col, 'value': col} for col in df.columns if 'QF' not in col],
                     multi=True, 
                     value="pH25C_1atm[Total]", 
-                    clearable=False)
+                    clearable=True)
             ])
         ]), width=4),
         
@@ -202,11 +203,24 @@ app.layout = dbc.Container([
                 dcc.Dropdown(
                     id='y-axis-dropdown', 
                     options=[{'label': col, 'value': col} for col in df.columns if 'QF' not in col], 
-                    # multi=True,
+                    multi=True,
                     value="Depth[m]", 
-                    clearable=False)
+                    clearable=True)
+            ])
+        ]), width=4),
+
+        dbc.Col(dbc.Card([
+            dbc.CardBody([
+                html.Label("Depth Range"),
+                dcc.RangeSlider(
+                    id='depth-slider',
+                    min=0, max=1000, step=50,
+                    marks={int(i): str(int(i)) for i in range(int(0), int(1000) + 1, 50)},
+                    value=[0, 1000],
+                )
             ])
         ]), width=4)
+
     ], className="mb-3"),
 
     dbc.Row([
@@ -236,7 +250,7 @@ def update_file(selected_file):
     date_min, date_max = df["Date"].min(), df["Date"].max()
     new_marks = {int(i): str(int(i)) for i in range(int(station_min), int(station_max) + 1, 5)}
     # Return updated values for filters
-    return station_min, station_max, [station_min, station_max], new_marks, date_min, date_max, date_min, date_max
+    return station_min, station_max, [max(station_min, station_max - 10), station_max], new_marks, date_min, date_max, date_min, date_max
 
 
 @callback(
@@ -283,10 +297,11 @@ def toggle_profile_input(selected_filter):
      Input('data-quality', 'value'),
      Input('x-axis-dropdown', 'value'),
      Input('y-axis-dropdown', 'value'),
+     Input('depth-slider','value'),
      State('Deployment-Dropdown', 'value')]
 )
 
-def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, selected_file):
+def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, depth_range, selected_file):
 
     df = load_latest_data(folder_path, selected_file)
 
@@ -306,7 +321,9 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
         filtered_df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
     else:  # Profile number
         filtered_df = df[df["Station"] == profile_number] if profile_number is not None else df
-
+    
+    depth_min, depth_max = depth_range  # Unpack values
+    filtered_df = filtered_df[(filtered_df['Depth[m]'] > depth_min) & (filtered_df['Depth[m]'] < depth_max)]
 
     # Map Plot
     map_fig = px.scatter_map(
@@ -378,66 +395,75 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     )
     scatter_fig_Doxy.update_yaxes(autorange="reversed")
 
-    # scatter_fig_xy = px.scatter(
-    #     filtered_df, x=x_column, y=y_column,
-    #     labels={x_column: x_column, y_column: y_column, "Station": "Profile"},
-    #     title=f"{x_column} vs. {y_column}",
-    #     template="plotly_white",
-    #     color='Station'
-    # )
-    # scatter_fig_xy.update_yaxes(autorange="reversed")
-
     scatter_fig_xy = go.Figure()
 
-    # Ensure x_column is always a list
+    # Ensure x_column and y_column are always lists
     if isinstance(x_column, str):
         x_columns = [x_column]  # Convert single selection to list
     else:
         x_columns = x_column  # Already a list
 
-    # Filter out any x-columns not in the DataFrame
+    if isinstance(y_column, str):
+        y_columns = [y_column]  # Convert single selection to list
+    else:
+        y_columns = y_column  # Already a list
+
+    # Filter out invalid columns
     valid_x_columns = [x for x in x_columns if x in filtered_df.columns]
+    valid_y_columns = [y for y in y_columns if y in filtered_df.columns]
 
     if not valid_x_columns:
-        raise ValueError("No valid x-axis columns found in the selected data.")
+        empty_fig = go.Figure()
+        return map_fig, scatter_fig_pH25, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, empty_fig
+    if not valid_y_columns:
+        empty_fig = go.Figure()
+        return map_fig, scatter_fig_pH25, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, empty_fig
 
-    # Iterate over valid x-columns and add traces with separate x-axes
+    # Iterate over valid x and y columns and add traces
     for i, x_col in enumerate(valid_x_columns):
-        xaxis_name = "x" if i == 0 else f"x{i+1}"  # First axis is "x", others are "x2", "x3", etc.
+        for j, y_col in enumerate(valid_y_columns):
+            xaxis_name = "x" if i == 0 else f"x{i+1}"
+            yaxis_name = "y" if j == 0 else f"y{j+1}"
 
-        scatter_fig_xy.add_trace(go.Scatter(
-            x=filtered_df[x_col],
-            y=filtered_df[y_column],
-            mode='markers',
-            name=x_col,  # Legend entry for each x-column
-            xaxis=xaxis_name  # Assign to respective x-axis
-        ))
+            scatter_fig_xy.add_trace(go.Scatter(
+                x=filtered_df[x_col],
+                y=filtered_df[y_col],
+                mode='markers',
+                name=f"{x_col} vs {y_col}",
+                xaxis=xaxis_name,
+                yaxis=yaxis_name
+            ))
 
-    # Define layout with multiple x-axes
+    # Define layout with multiple x- and y-axes
     layout = {
-        "title": f"{', '.join(valid_x_columns)} vs. {y_column}",
-        "yaxis": {"title": y_column, "autorange": "reversed"},
+        "title": f"{', '.join(valid_x_columns)} vs. {', '.join(valid_y_columns)}",
         "xaxis": {"title": valid_x_columns[0]},  # Primary x-axis
+        "yaxis": {"title": valid_y_columns[0], "autorange": "reversed"},  # Primary y-axis
     }
 
     # Add additional x-axes dynamically
     for i, x_col in enumerate(valid_x_columns[1:], start=2):
         layout[f"xaxis{i}"] = {
             "title": x_col,
-            "anchor":"free",
-            "overlaying": "x",  # Overlay on the same plot
-            # "side": "top" if i % 2 == 0 else "bottom",  # Alternate positions
+            "anchor": "free",
+            "overlaying": "x",
             "side": "bottom",
-            "position": i * .1,  # Offset each x-axis by 5% of the plot width
-            "showgrid": False,  # Hide grid for additional x-axes
-            # "tickangle": 45 if i % 2 == 0 else -45  # Tilt ticks for legibility
-            "tickmode":"sync",
+            "position": i * 0.1,  # Offset each x-axis
+            "showgrid": False,
+            "tickmode": "sync",
+        }
+
+    # Add additional y-axes dynamically with proper spacing
+    for j, y_col in enumerate(valid_y_columns[1:], start=2):
+        layout[f"yaxis{j}"] = {
+            "title": y_col,
+            "overlaying": "y",
+            "side": "right",
+            "showgrid": False,
+            "position": 1 - (j - 1) * 0.1,  # Move each additional y-axis further right
         }
 
     scatter_fig_xy.update_layout(layout, template="plotly_white")
-
-
-
 
     return map_fig, scatter_fig_pH25, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, scatter_fig_xy
 
