@@ -204,7 +204,8 @@ app.layout = dbc.Container([
     Input('Deployment-Dropdown', 'value')
 )
 def update_file(selected_file):
-    query = f'SELECT * FROM {selected_file}'
+    f = f'"{selected_file}"'
+    query = f'SELECT * FROM {f}'
     df = load_latest_data(query, engine)
 
     # Get new min/max values for filters
@@ -230,7 +231,8 @@ def toggle_filters(selected_filter):
     Input('Deployment-Dropdown', 'value')
 )
 def update_profile_number(selected_file):
-    query = f'SELECT * FROM {selected_file}'
+    f = f'"{selected_file}"'
+    query = f'SELECT * FROM {f}'
     df = load_latest_data(query, engine)
     
     if df.empty:
@@ -266,7 +268,8 @@ def toggle_profile_input(selected_filter):
 
 def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, depth_range, selected_file):
 
-    query = f'SELECT * FROM {selected_file}'
+    f = f'"{selected_file}"'
+    query = f'SELECT * FROM {f}'
     df = load_latest_data(query, engine)
 
     # Identify QF columns (columns immediately following measured values)
