@@ -33,12 +33,15 @@ date_min, date_max = df["Date"].min(), df["Date"].max()
 
 
 # Initialize the app with a Bootstrap theme
-external_stylesheets = [dbc.themes.CERULEAN]
+# external_stylesheets = [dbc.themes.CERULEAN]
+external_stylesheets = [dbc.themes.FLATLY ]
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server # Required for Gunicorn
 
 # Layout with dbc.Cards
 app.layout = dbc.Container([
+    dcc.Store(id='stored-data', data=None, storage_type='memory'),
+
     dbc.Row(dbc.Col(html.H3('Glide App', className="text-primary text-center"))),
     
     dbc.Row([
@@ -200,8 +203,11 @@ app.layout = dbc.Container([
      Output('date-picker-range', 'min_date_allowed'),
      Output('date-picker-range', 'max_date_allowed'),
      Output('date-picker-range', 'start_date'),
-     Output('date-picker-range', 'end_date')],
-    Input('Deployment-Dropdown', 'value')
+     Output('date-picker-range', 'end_date'),
+     Output('profile-number', 'value'),
+     Output('profile-number','min'),
+     Output('profile-number','max'),],
+     Input('Deployment-Dropdown', 'value')
 )
 def update_file(selected_file):
     f = f'"{selected_file}"'
@@ -213,7 +219,7 @@ def update_file(selected_file):
     date_min, date_max = df["Date"].min(), df["Date"].max()
     new_marks = {int(i): str(int(i)) for i in range(int(station_min), int(station_max) + 1, 5)}
     # Return updated values for filters
-    return station_min, station_max, [max(station_min, station_max - 10), station_max], new_marks, date_min, date_max, date_min, date_max
+    return station_min, station_max, [max(station_min, station_max - 10), station_max], new_marks, date_min, date_max, date_min, date_max, station_max, station_min, station_max
 
 
 @callback(
@@ -224,29 +230,31 @@ def update_file(selected_file):
 def toggle_filters(selected_filter):
     return selected_filter != 'station', selected_filter != 'date'
 
-@callback(
-    Output('profile-number', 'value'),
-    Output('profile-number','min'),
-    Output('profile-number','max'),
-    Input('Deployment-Dropdown', 'value')
-)
-def update_profile_number(selected_file):
-    f = f'"{selected_file}"'
-    query = f'SELECT * FROM {f}'
-    df = load_latest_data(query, engine)
+# Added parameters to update_file
+# @callback(
+#     Output('profile-number', 'value'),
+#     Output('profile-number','min'),
+#     Output('profile-number','max'),
+#     Input('Deployment-Dropdown', 'value')
+# )
+# def update_profile_number(selected_file):
+#     f = f'"{selected_file}"'
+#     query = f'SELECT * FROM {f}'
+#     df = load_latest_data(query, engine)
     
-    if df.empty:
-        return None
+#     if df.empty:
+#         return None
 
-    station_max = df["Station"].max()
-    station_min = df["Station"].min()
-    return station_max, station_min, station_max  # Set to the max station of the new file
+#     station_max = df["Station"].max()
+#     station_min = df["Station"].min()
+#     return station_max, station_min, station_max  # Set to the max station of the new file
 
 def toggle_profile_input(selected_filter):
     return selected_filter != 'profile'  # Disable input unless 'profile' is selected
 
 @callback(
-    [Output('map-plot','figure'),
+    [Output('stored-data', 'data'),  # Store df
+     Output('map-plot','figure'),
      Output('scatter-plot-pH','figure'),
      Output('scatter-plot-pH-delta','figure'),
      Output('scatter-plot-chla','figure'),
@@ -262,15 +270,35 @@ def toggle_profile_input(selected_filter):
      Input('data-quality', 'value'),
      Input('x-axis-dropdown', 'value'),
      Input('y-axis-dropdown', 'value'),
-     Input('depth-slider','value'),
-     State('Deployment-Dropdown', 'value')]
+     Input('depth-slider','value')],
+    [State('Deployment-Dropdown', 'value'),
+     State('stored-data', 'data')]  # Check if df is already stored
 )
 
-def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, depth_range, selected_file):
+def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, depth_range, selected_file, stored_data):
 
-    f = f'"{selected_file}"'
-    query = f'SELECT * FROM {f}'
-    df = load_latest_data(query, engine)
+   # Step 1: Get latest row count from database
+    row_count_query = f'SELECT COUNT(*) FROM "{selected_file}"'
+    row_count = pd.read_sql(row_count_query, engine).iloc[0, 0]  # Fetch row count
+    
+    # latest_timestamp_query = f'SELECT MAX("Date") FROM "{selected_file}"'
+    # latest_timestamp = pd.read_sql(latest_timestamp_query, engine).iloc[0, 0]  # Fetch latest date
+
+    # Step 2: Check if stored_data exists and matches the latest database state
+    if stored_data is None or stored_data.get('row_count') != row_count:
+        print("Loading new data from database...")  # Debugging
+        f = f'"{selected_file}"'
+        query = f'SELECT * FROM {f}'
+        df = load_latest_data(query, engine)
+
+        # Store table metadata along with data
+        stored_data = {
+            'row_count': row_count,
+            'data': df.to_dict('records')
+        }
+    else:
+        print("Using cached data...")  # Debugging
+        df = pd.DataFrame(stored_data['data'])  # Convert stored data back to DataFrame
 
     # Identify QF columns (columns immediately following measured values)
     qf_columns = [col for col in df.columns if 'QF' in col]
@@ -432,7 +460,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
 
     scatter_fig_xy.update_layout(layout, template="plotly_white")
 
-    return map_fig, scatter_fig_pH25, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, scatter_fig_xy
+    return stored_data, map_fig, scatter_fig_pH25, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, scatter_fig_xy
 
 if __name__ == '__main__':
     # app.run(debug=True)

@@ -26,44 +26,6 @@ external_stylesheets = [dbc.themes.CERULEAN]
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server # Required for Gunicorn
 
-# Predefined dropdown options
-dropdown_options = [
-  {"label": "Profile", "value": "Station"},
-  {"label": "Date", "value": "Date"},
-  {"label": "Datetime", "value": "Datetime"},
-  {"label": "hh:mm", "value": "hh:mm"},
-  {"label": "Lon [°E]", "value": "Lon [°E]"},
-  {"label": "Lat [°N]", "value": "Lat [°N]"},
-  {"label": "Pressure[dbar]", "value": "Pressure[dbar]"},
-  {"label": "Temperature[°C]", "value": "Temperature[°C]"},
-  {"label": "Salinity[pss]", "value": "Salinity[pss]"},
-  {"label": "Sigma_theta[kg/m^3]", "value": "Sigma_theta[kg/m^3]"},
-  {"label": "Depth[m]", "value": "Depth[m]"},
-  {"label": "Oxygen[µmol/kg]", "value": "Oxygen[µmol/kg]"},
-  {"label": "OxygenSat[%]", "value": "OxygenSat[%]"},
-  {"label": "Nitrate[µmol/kg]", "value": "Nitrate[µmol/kg]"},
-  {"label": "Chl_a[mg/m^3]", "value": "Chl_a[mg/m^3]"},
-  {"label": "b_bp700[1/m]", "value": "b_bp700[1/m]"},
-  {"label": "pHinsitu[Total]", "value": "pHinsitu[Total]"},
-  {"label": "b_bp532[1/m]", "value": "b_bp532[1/m]"},
-  {"label": "CDOM[ppb]", "value": "CDOM[ppb]"},
-  {"label": "TALK_CANYONB[µmol/kg]", "value": "TALK_CANYONB[µmol/kg]"},
-  {"label": "DIC_CANYONB[µmol/kg]", "value": "DIC_CANYONB[µmol/kg]"},
-  {"label": "pCO2_CANYONB[µatm]", "value": "pCO2_CANYONB[µatm]"},
-  {"label": "SAT_AR_CANYONB[]", "value": "SAT_AR_CANYONB[]"},
-  {"label": "pH25C_1atm[Total]", "value": "pH25C_1atm[Total]"},
-  {"label": "DOWNWELL_PAR[µmol Quanta/m^2/sec]", "value": "DOWNWELL_PAR[µmol Quanta/m^2/sec]"},
-  {"label": "DOWN_IRRAD380[W/m^2/nm]", "value": "DOWN_IRRAD380[W/m^2/nm]"},
-  {"label": "DOWN_IRRAD443[W/m^2/nm]", "value": "DOWN_IRRAD443[W/m^2/nm]"},
-  {"label": "DOWN_IRRAD490[W/m^2/nm]", "value": "DOWN_IRRAD490[W/m^2/nm]"},
-  {"label": "VRS[Volts]", "value": "VRS[Volts]"},
-  {"label": "VRS_STD[Volts]", "value": "VRS_STD[Volts]"},
-  {"label": "VK[Volts]", "value": "VK[Volts]"},
-  {"label": "VK_STD[Volts]", "value": "VK_STD[Volts]"},
-  {"label": "IK[nA]", "value": "IK[nA]"},
-  {"label": "Ib[nA]", "value": "Ib[nA]"}
-]
-
 # Layout with dbc.Cards
 app.layout = dbc.Container([
     dbc.Row(dbc.Col(html.H3('Glide App', className="text-primary text-center"))),
