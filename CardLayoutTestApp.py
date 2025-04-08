@@ -11,11 +11,10 @@ import plotly.graph_objects as go
 folder_path = r"\\sirocco\wwwroot\lobo\Data\GliderVizData"
 files = [f for f in os.listdir(folder_path) if 'RT.txt' in f]
 
-
 # Load and clean data
 def load_latest_data(folder_path, selected_file=None):
     """Loads the latest RT.txt file, cleans it, and returns a DataFrame."""
-
+    # print("loading file")
     filename = os.path.join(folder_path, folder_path, selected_file if selected_file else files[-1])
     df = pd.read_csv(filename, delimiter="\t", skiprows=6)
 
@@ -23,9 +22,14 @@ def load_latest_data(folder_path, selected_file=None):
     df.replace(-1e10, pd.NA, inplace=True)
     df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
     df['Datetime'] = pd.to_datetime(df['mon/day/yr'] + ' ' + df['hh:mm'], format='%m/%d/%Y %H:%M')
-    df['pHin_Canb_Delta'] = df['pHinsitu[Total]'] - df['PHIN_CANYONB[Total]']
+    # Only calculate pHin_Canb_Delta if 'PHIN_CANYONB[Total]' exists
+    if 'PHIN_CANYONB[Total]' in df.columns:
+        df['pHin_Canb_Delta'] = df['pHinsitu[Total]'] - df['PHIN_CANYONB[Total]']
+    else:
+        df['pHin_Canb_Delta'] = pd.NA  # Optional: Add the column as all-NA if needed    
+    
     return df
-
+    # print(df["Station"].head())
 df = load_latest_data(folder_path)
 
 # Get min/max values for filters
@@ -345,6 +349,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
         color='Station'
     )
     scatter_fig_pH25.update_yaxes(autorange="reversed")
+    scatter_fig_pH25.update_xaxes(range=[7.4, 7.9])
     # scatter_fig.update_layout(height=1000, width=1000)
 
     scatter_fig_pHin_delta = px.scatter(
