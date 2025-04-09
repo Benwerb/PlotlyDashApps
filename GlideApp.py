@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import requests
 from bs4 import BeautifulSoup
 from io import StringIO
+import re
 
 # Hardcode path to files and create list of all missions
 folder_path = "https://www3.mbari.org/lobo/Data/GliderVizData/"
@@ -49,6 +50,40 @@ df = load_latest_data(folder_path)
 # Get min/max values for filters
 station_min, station_max = df["Station"].min(), df["Station"].max()
 date_min, date_max = df["Date"].min(), df["Date"].max() 
+
+url = 'https://ocean.weather.gov/gulf_stream_latest.txt'
+def getGulfStreamCoords(url):
+    print('running')
+    # Step 1: Retrieve the data
+
+    response = requests.get(url)
+    data = response.text
+
+    # Step 2: Locate the coordinates section
+    match = re.search(r'RMKS/1\. GULF STREAM NORTH WALL DATA FOR.*?:\s*(.*?)(?:RMKS/|$)', data, re.S)
+    if not match:
+        raise ValueError('Could not locate the Gulf Stream coordinates section.')
+    coordinates_text = match.group(1).strip()
+
+    # Step 3: Extract coordinate pairs (format like 25.5N80.1W)
+    coordinate_strings = re.findall(r'(\d+\.\d+N\d+\.\d+W)', coordinates_text)
+
+    # Step 4: Convert to decimal degrees and store in lists
+    latitudes = []
+    longitudes = []
+
+    for pair in coordinate_strings:
+        lat_str, lon_str = re.match(r'(\d+\.\d+)N(\d+\.\d+)W', pair).groups()
+        latitudes.append(float(lat_str))
+        longitudes.append(-float(lon_str))  # W longitude is negative
+
+    # Step 5: Create a pandas DataFrame
+    gulfstreamcoords = pd.DataFrame({
+        'Lat': latitudes,
+        'Lon': longitudes
+    })
+    return gulfstreamcoords
+gulfstreamcoords = getGulfStreamCoords(url)
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = [dbc.themes.FLATLY ]
@@ -151,17 +186,18 @@ app.layout = dbc.Container([
     
     dbc.Row([
         dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='map-plot', style={'height': '1000px','width': '1000px'})])]), width=8),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Checklist(id='overlay-gulf-stream', options=[{'label': 'Overlay Gulf Stream Bounds (https://ocean.weather.gov/gulf_stream_latest.txt) ', 'value': 'gulf_stream'}], value=[], labelStyle={'display': 'block'})])]), width=4)
     ]),
 
     dbc.Row([
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-pH', style={'height': '500px','width': '500px'})])]), width=4),
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-pH-delta', style={'height': '500px','width': '500px'})])]), width=4),
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-chla', style={'height': '500px','width': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-pH', style={'height': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-pH-delta', style={'height': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-chla', style={'height': '500px'})])]), width=4),
     ]),
     dbc.Row([
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-Temperature', style={'height': '500px','width': '500px'})])]), width=4),
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-Salinity', style={'height': '500px','width': '500px'})])]), width=4),
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-Doxy', style={'height': '500px','width': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-Temperature', style={'height': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-Salinity', style={'height': '500px'})])]), width=4),
+        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-Doxy', style={'height': '500px'})])]), width=4),
     ]),
     
     dbc.Row([
@@ -260,6 +296,7 @@ def update_profile_number(selected_file):
 def toggle_profile_input(selected_filter):
     return selected_filter != 'profile'  # Disable input unless 'profile' is selected
 
+
 @callback(
     [Output('map-plot','figure'),
      Output('scatter-plot-pH','figure'),
@@ -278,10 +315,11 @@ def toggle_profile_input(selected_filter):
      Input('x-axis-dropdown', 'value'),
      Input('y-axis-dropdown', 'value'),
      Input('depth-slider','value'),
+     Input('overlay-gulf-stream','value'),
      State('Deployment-Dropdown', 'value')]
 )
 
-def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, depth_range, selected_file):
+def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, depth_range, gulf_stream_check, selected_file):
 
     df = load_latest_data(folder_path, selected_file)
 
@@ -305,16 +343,38 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     depth_min, depth_max = depth_range  # Unpack values
     filtered_df = filtered_df[(filtered_df['Depth[m]'] > depth_min) & (filtered_df['Depth[m]'] < depth_max)]
 
-    # Map Plot
+    # # Map Plot
+    # map_fig = px.scatter_map(
+    #     filtered_df, lat="Lat [°N]", lon="Lon [°E]",
+    #     hover_name="Station",
+    #     map_style="satellite",
+    #     zoom=8,
+    #     color='Station'
+    #     # labels={"Station": "Profile"}
+    # )
+    # # map_fig.update_layout(height=500, width=500)
+
+    # Create base figure
     map_fig = px.scatter_map(
         filtered_df, lat="Lat [°N]", lon="Lon [°E]",
         hover_name="Station",
         map_style="satellite",
         zoom=8,
-        color='Station'
-        # labels={"Station": "Profile"}
+        color='Station',
+        labels={"Station": "Profile"}
     )
-    # map_fig.update_layout(height=500, width=500)
+
+    # If Gulf Stream overlay is checked, add trace
+    print("Gulf Stream checkbox value received:", gulf_stream_check)
+    if 'gulf_stream' in gulf_stream_check:
+        map_fig.add_trace(go.Scattermap(
+            lat=gulfstreamcoords['Lat'],
+            lon=gulfstreamcoords['Lon'],
+            mode='lines+markers',
+            name='Gulf Stream',
+            marker=dict(size=6, color='deepskyblue'),
+            line=dict(width=2, color='deepskyblue')
+        ))
 
     # Scatter Plot pH25atm
     scatter_fig_pH25 = px.scatter(
