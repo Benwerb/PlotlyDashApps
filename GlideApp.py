@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from io import StringIO
 
 # Hardcode path to files and create list of all missions
-folder_path = "http://sirocco/lobo/Data/GliderVizData/"
+folder_path = "https://www3.mbari.org/lobo/Data/GliderVizData/"
 
 response = requests.get(folder_path)
 soup = BeautifulSoup(response.text, 'html.parser')
