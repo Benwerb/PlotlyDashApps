@@ -185,8 +185,39 @@ app.layout = dbc.Container([
     ], className="mb-3"),
     
     dbc.Row([
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='map-plot', style={'height': '1000px','width': '1000px'})])]), width=8),
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Checklist(id='overlay-gulf-stream', options=[{'label': 'Overlay Gulf Stream Bounds (https://ocean.weather.gov/gulf_stream_latest.txt) ', 'value': 'gulf_stream'}], value=[], labelStyle={'display': 'block'})])]), width=4)
+        dbc.Col(
+            dbc.Card([
+                dbc.CardBody([
+                    dcc.Graph(id='map-plot', style={'height': '1000px', 'width': '1000px'})
+                ])
+            ]), width=8
+        ),
+        dbc.Col(
+            dbc.Card([
+                dbc.CardBody([
+                    dcc.Checklist(
+                        id='overlay-gulf-stream',
+                        options=[{'label': 'Overlay Gulf Stream Bounds (https://ocean.weather.gov/gulf_stream_latest.txt)', 'value': 'gulf_stream'}],
+                        value=[],
+                        labelStyle={'display': 'block'}
+                    ),
+                    dcc.Checklist(
+                        id='upcast-only',
+                        options=[{'label': 'Upcast only', 'value': 'Upcast'}],
+                        value=[],
+                        labelStyle={'display': 'block'},
+                        style={'marginTop': '20px'}
+                    ),
+                    dcc.Checklist(
+                        id='downcast-only',
+                        options=[{'label': 'Downcast only', 'value': 'Downcast'}],
+                        value=[],
+                        labelStyle={'display': 'block'},
+                        style={'marginTop': '20px'}
+                    )
+                ])
+            ]), width=4
+        )
     ]),
 
     dbc.Row([
@@ -316,10 +347,12 @@ def toggle_profile_input(selected_filter):
      Input('y-axis-dropdown', 'value'),
      Input('depth-slider','value'),
      Input('overlay-gulf-stream','value'),
+     Input('upcast-only','value'),
+     Input('downcast-only','value'),
      State('Deployment-Dropdown', 'value')]
 )
 
-def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, depth_range, gulf_stream_check, selected_file):
+def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, depth_range, gulf_stream_check, upcast_only_check, downcast_only_check, selected_file):
 
     df = load_latest_data(folder_path, selected_file)
 
@@ -339,6 +372,18 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
         filtered_df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
     else:  # Profile number
         filtered_df = df[df["Station"] == profile_number] if profile_number is not None else df
+
+    # Apply filter based on cast direction
+    if 'Upcast' in upcast_only_check:
+        filtered_df = filtered_df.copy()
+        filtered_df["depth_diff"] = filtered_df["Depth[m]"].diff()
+        filtered_df = filtered_df[filtered_df["depth_diff"] < 0]
+        filtered_df.drop(columns="depth_diff", inplace=True)
+    if 'Downcast' in downcast_only_check:
+        filtered_df = filtered_df.copy()
+        filtered_df["depth_diff"] = filtered_df["Depth[m]"].diff()
+        filtered_df = filtered_df[filtered_df["depth_diff"] < 0]
+        filtered_df.drop(columns="depth_diff", inplace=True)
     
     depth_min, depth_max = depth_range  # Unpack values
     filtered_df = filtered_df[(filtered_df['Depth[m]'] > depth_min) & (filtered_df['Depth[m]'] < depth_max)]
