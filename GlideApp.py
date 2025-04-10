@@ -382,7 +382,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     if 'Downcast' in downcast_only_check:
         filtered_df = filtered_df.copy()
         filtered_df["depth_diff"] = filtered_df["Depth[m]"].diff()
-        filtered_df = filtered_df[filtered_df["depth_diff"] < 0]
+        filtered_df = filtered_df[filtered_df["depth_diff"] > 0]
         filtered_df.drop(columns="depth_diff", inplace=True)
     
     depth_min, depth_max = depth_range  # Unpack values
