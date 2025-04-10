@@ -243,7 +243,7 @@ app.layout = dbc.Container([
         dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-xy', style={'height': '1500px', 'width': '1500px'})])]), width=12),
     ]),
 
-], fluid=True)
+], fluid=True, className='dashboard-container')
 
 # Dynamically load file
 @callback(
@@ -343,17 +343,6 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     depth_min, depth_max = depth_range  # Unpack values
     filtered_df = filtered_df[(filtered_df['Depth[m]'] > depth_min) & (filtered_df['Depth[m]'] < depth_max)]
 
-    # # Map Plot
-    # map_fig = px.scatter_map(
-    #     filtered_df, lat="Lat [°N]", lon="Lon [°E]",
-    #     hover_name="Station",
-    #     map_style="satellite",
-    #     zoom=8,
-    #     color='Station'
-    #     # labels={"Station": "Profile"}
-    # )
-    # # map_fig.update_layout(height=500, width=500)
-
     # Create base figure
     map_fig = px.scatter_map(
         filtered_df, lat="Lat [°N]", lon="Lon [°E]",
@@ -377,14 +366,14 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
         ))
 
     # Scatter Plot pH25atm
-    scatter_fig_pH25 = px.scatter(
-        filtered_df, x="pH25C_1atm[Total]", y="Depth[m]",
-        labels={"pH25C_1atm[Total]", "Depth[m]", "Profile"},
-        title=f"pH25C_1atm[Total] vs. Depth[m]",
+    scatter_fig_pHin = px.scatter(
+        filtered_df, x="pHinsitu[Total]", y="Depth[m]",
+        labels={"pHinsitu[Total]", "Depth[m]", "Profile"},
+        title=f"pHinsitu[Total] vs. Depth[m]",
         template="plotly_white",
         color='Station'
     )
-    scatter_fig_pH25.update_yaxes(autorange="reversed")
+    scatter_fig_pHin.update_yaxes(autorange="reversed")
     # scatter_fig.update_layout(height=1000, width=1000)
 
     scatter_fig_pHin_delta = px.scatter(
@@ -454,10 +443,10 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
 
     if not valid_x_columns:
         empty_fig = go.Figure()
-        return map_fig, scatter_fig_pH25, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, empty_fig
+        return map_fig, scatter_fig_pHin, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, empty_fig
     if not valid_y_columns:
         empty_fig = go.Figure()
-        return map_fig, scatter_fig_pH25, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, empty_fig
+        return map_fig, scatter_fig_pHin, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, empty_fig
 
     # Iterate over valid x and y columns and add traces
     for i, x_col in enumerate(valid_x_columns):
@@ -505,7 +494,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
 
     scatter_fig_xy.update_layout(layout, template="plotly_white")
 
-    return map_fig, scatter_fig_pH25, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, scatter_fig_xy
+    return map_fig, scatter_fig_pHin, scatter_fig_pHin_delta, scatter_fig_Chla, scatter_fig_Temperature, scatter_fig_Salinity, scatter_fig_Doxy, scatter_fig_xy
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port
