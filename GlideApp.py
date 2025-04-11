@@ -90,196 +90,170 @@ external_stylesheets = [dbc.themes.FLATLY ]
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server # Required for Gunicorn
 
-# Layout with dbc.Cards
 app.layout = dbc.Container([
-    dbc.Row(dbc.Col(html.H3('Glide App', className="text-primary text-center"))),
-    
     dbc.Row([
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                html.Label("Select Deployment:"),
-                dcc.Dropdown(files, files[-1], id='Deployment-Dropdown', clearable=True),
-                html.Div(id="file-output")  # Output container
-            ])
-        ]), width=4)
-    ], className="mb-3"),
+        # LEFT Column (Controls)
+        dbc.Col([
+            html.Div([
+                html.H2('Glide App', className='text-info text-start',
+                        style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}),
+                
+                # Controls
+                *[
+                    dbc.Card([
+                        dbc.CardBody([control])
+                    ], className="mb-3") for control in [
+                        html.Div([
+                            html.Label("Select Deployment:"),
+                            dcc.Dropdown(files, files[-1], id='Deployment-Dropdown', clearable=True),
+                            html.Div(id="file-output")
+                        ]),
+                        html.Div([
+                            html.Label("Select Filter Method:"),
+                            dcc.RadioItems(
+                                id='filter-method',
+                                options=[
+                                    {'label': 'Filter by Profile Range', 'value': 'station'},
+                                    {'label': 'Filter by Profile', 'value': 'profile'},
+                                    {'label': 'Filter by Date', 'value': 'date'}
+                                ],
+                                value='station'
+                            )
+                        ]),
+                        html.Div([
+                            html.Label("Data Quality:"),
+                            dcc.RadioItems(
+                                id='data-quality',
+                                options=[
+                                    {'label': 'All', 'value': 'all'},
+                                    {'label': 'Good', 'value': 'good'},
+                                    {'label': 'Good + Questionable', 'value': 'good_questionable'}
+                                ],
+                                value='all'
+                            )
+                        ]),
+                        html.Div([
+                            html.Label("Cast Direction:"),
+                            dcc.RadioItems(
+                                id='cast-direction',
+                                options=[
+                                    {'label': 'Raw profile', 'value': 'Both'},
+                                    {'label': 'Upcast only', 'value': 'Upcast'},
+                                    {'label': 'Downcast only', 'value': 'Downcast'}
+                                ],
+                                value='Both'
+                            )
+                        ]),
+                        html.Div([
+                            html.Label("Station Range:"),
+                            dcc.RangeSlider(
+                                min=station_min, max=station_max, step=1,
+                                marks={i: str(i) for i in range(int(station_min), int(station_max) + 1, 10)},
+                                value=[station_min, station_max],
+                                id='station-range-slider'
+                            )
+                        ]),
+                        html.Div([
+                            html.Label("Profile:"),
+                            dcc.Input(
+                                id='profile-number',
+                                type='number',
+                                min=station_min,
+                                max=station_max,
+                                placeholder=station_max,
+                                value=station_max
+                            )
+                        ]),
+                        html.Div([
+                            html.Label("Date Range:"),
+                            dcc.DatePickerRange(
+                                id='date-picker-range',
+                                min_date_allowed=date_min,
+                                max_date_allowed=date_max,
+                                start_date=date_min,
+                                end_date=date_max
+                            )
+                        ]),
+                        html.Div([
+                            html.Label("Select X-axis:"),
+                            dcc.Dropdown(
+                                id='x-axis-dropdown',
+                                options=[{'label': col, 'value': col} for col in df.columns if 'QF' not in col],
+                                multi=True,
+                                value="pH25C_1atm[Total]"
+                            )
+                        ]),
+                        html.Div([
+                            html.Label("Select Y-axis:"),
+                            dcc.Dropdown(
+                                id='y-axis-dropdown',
+                                options=[{'label': col, 'value': col} for col in df.columns if 'QF' not in col],
+                                multi=True,
+                                value="Depth[m]"
+                            )
+                        ]),
+                        html.Div([
+                            html.Label("Depth Range"),
+                            dcc.RangeSlider(
+                                id='depth-slider',
+                                min=0, max=1000, step=50,
+                                marks={i: str(i) for i in range(0, 1001, 200)},
+                                value=[0, 1000]
+                            )
+                        ]),
+                        html.Div([
+                            html.Label("Map Options:"),
+                            dcc.Checklist(
+                                id='overlay-gulf-stream',
+                                options=[{'label': 'Overlay Gulf Stream Bounds', 'value': 'gulf_stream'}],
+                                value=[],
+                                labelStyle={'display': 'block'}
+                            )
+                        ])
+                    ]
+                ],
+            ], style={'backgroundColor': '#e0f7fa', 'padding': '10px', 'borderRadius': '10px'})
+        ], width=3),
 
-    dbc.Row([
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                html.Label("Select Filter Method:"),
-                dcc.RadioItems(
-                    id='filter-method',
-                    options=[
-                        {'label': 'Filter by Profile Range', 'value': 'station'},
-                        {'label': 'Filter by Profile', 'value': 'profile'},
-                        {'label': 'Filter by Date', 'value': 'date'}
-                    ],
-                    value='station',
-                    inline=False
-                )
-            ])
-        ]), width=4),
+        # RIGHT Column (Plots)
+        dbc.Col([
+            html.Div([
+                # Big XY Plot
+                dbc.Card([
+                    dbc.CardBody([
+                        dcc.Graph(
+                            id='scatter-plot-xy',
+                            style={'height': '800px', 'width': '800px', 'margin': '0 auto'}
+                        )
+                    ])
+                ], className="mb-3"),
 
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                html.Label("Data Quality:"),
-                dcc.RadioItems(
-                    id='data-quality',
-                    options=[
-                        {'label': 'All', 'value': 'all'},
-                        {'label': 'Good', 'value': 'good'},
-                        {'label': 'Good + Questionable', 'value': 'good_questionable'}
-                    ],
-                    value='all',
-                    inline=False
-                )
-            ])
-        ]), width=4),
+                # First row of 3 square plots
+                dbc.Row([
+                    dbc.Col(dcc.Graph(id='scatter-plot-pH', style={'height': '400px', 'width': '400px'}), width=4),
+                    dbc.Col(dcc.Graph(id='scatter-plot-pH-delta', style={'height': '400px', 'width': '400px'}), width=4),
+                    dbc.Col(dcc.Graph(id='scatter-plot-chla', style={'height': '400px', 'width': '400px'}), width=4),
+                ], className="mb-3"),
 
-        dbc.Col(
-            dbc.Card([
-                dbc.CardBody([
-                    html.Label("Cast Direction:"),
-                    dcc.RadioItems(
-                        id='cast-direction',
-                        options=[{'label': 'Upcast and Downcast', 'value': 'Both'},
-                                 {'label': 'Upcast only', 'value': 'Upcast'},
-                                 {'label': 'Downcast only', 'value': 'Downcast'}
-                        ],
-                        value='Both',
-                        inline=False
-                    )
+                # Second row of 3 square plots
+                dbc.Row([
+                    dbc.Col(dcc.Graph(id='scatter-plot-Temperature', style={'height': '400px', 'width': '400px'}), width=4),
+                    dbc.Col(dcc.Graph(id='scatter-plot-Salinity', style={'height': '400px', 'width': '400px'}), width=4),
+                    dbc.Col(dcc.Graph(id='scatter-plot-Doxy', style={'height': '400px', 'width': '400px'}), width=4),
+                ], className="mb-3"),
+
+                # Map plot - Full width square
+                dbc.Card([
+                    dbc.CardBody([
+                        dcc.Graph(
+                            id='map-plot',
+                            style={'height': '800px', 'width': '800px', 'margin': '0 auto'}
+                        )
+                    ])
                 ])
-            ]), width=4),
-
-    ], className="mb-3"),
-
-    # max(station_min, station_max - 10)
-    dbc.Row([
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                html.Label("Station Range:"),
-                dcc.RangeSlider(
-                    min=station_min, max=station_max, step=1,
-                    marks={int(i): str(int(i)) for i in range(int(station_min), int(station_max) + 1, 10)},
-                    value=[station_min, station_max],
-                    id='station-range-slider'
-                )
-            ])
-        ]), width=8)
-    ], className="mb-3"),
-
-    dbc.Row([
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                html.Label("Profile:"),
-                dcc.Input(
-                    id='profile-number',
-                    type='number',
-                    min=station_min,
-                    max=station_max,
-                    placeholder=station_max,
-                    value=station_max
-                )
-            ])
-        ]), width=8)
-    ], className="mb-3"),
-
-
-    dbc.Row([
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                html.Label("Date Range:"),
-                dcc.DatePickerRange(
-                    id='date-picker-range',
-                    min_date_allowed=date_min,
-                    max_date_allowed=date_max,
-                    start_date=date_min,
-                    end_date=date_max
-                )
-            ])
-        ]), width=8)
-    ], className="mb-3"),
-    
-    dbc.Row([
-        dbc.Col(
-            dbc.Card([
-                dbc.CardBody([
-                    dcc.Graph(id='map-plot', style={'height': '1000px', 'width': '1000px'})
-                ])
-            ]), width=8
-        ),
-        dbc.Col(
-            dbc.Card([
-                dbc.CardBody([
-                    html.Label("Map Options:"),
-                    dcc.Checklist(
-                        id='overlay-gulf-stream',
-                        options=[{'label': 'Overlay Gulf Stream Bounds (https://ocean.weather.gov/gulf_stream_latest.txt)', 'value': 'gulf_stream'}],
-                        value=[],
-                        labelStyle={'display': 'block'}
-                    )
-                ])
-            ]), width=4
-        )
-    ]),
-
-    dbc.Row([
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-pH', style={'height': '500px'})])]), xs=12, md=4),
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-pH-delta', style={'height': '500px'})])]), xs=12, md=4),
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-chla', style={'height': '500px'})])]), xs=12, md=4),
-    ]),
-    dbc.Row([
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-Temperature', style={'height': '500px'})])]), xs=12, md=4),
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-Salinity', style={'height': '500px'})])]), xs=12, md=4),
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-Doxy', style={'height': '500px'})])]), xs=12, md=4),
-    ]),
-
-    
-    dbc.Row([
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                html.Label("Select X-axis:"),
-                dcc.Dropdown(
-                    id='x-axis-dropdown', 
-                    options=[{'label': col, 'value': col} for col in df.columns if 'QF' not in col],
-                    multi=True, 
-                    value="pH25C_1atm[Total]", 
-                    clearable=True)
-            ])
-        ]), width=4),
-        
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                html.Label("Select Y-axis:"),
-                dcc.Dropdown(
-                    id='y-axis-dropdown', 
-                    options=[{'label': col, 'value': col} for col in df.columns if 'QF' not in col], 
-                    multi=True,
-                    value="Depth[m]", 
-                    clearable=True)
-            ])
-        ]), width=4),
-
-        dbc.Col(dbc.Card([
-            dbc.CardBody([
-                html.Label("Depth Range"),
-                dcc.RangeSlider(
-                    id='depth-slider',
-                    min=0, max=1000, step=50,
-                    marks={int(i): str(int(i)) for i in range(int(0), int(1000) + 1, 50)},
-                    value=[0, 1000],
-                )
-            ])
-        ]), width=4)
-
-    ], className="mb-3"),
-
-    dbc.Row([
-        dbc.Col(dbc.Card([dbc.CardBody([dcc.Graph(id='scatter-plot-xy', style={'height': '1500px', 'width': '1500px'})])]), width=12),
-    ]),
-
+            ], style={'backgroundColor': '#e3f2fd', 'padding': '10px', 'borderRadius': '10px'})
+        ], width=9)
+    ])
 ], fluid=True, className='dashboard-container')
 
 # Dynamically load file
@@ -407,7 +381,6 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     )
 
     # If Gulf Stream overlay is checked, add trace
-    print("Gulf Stream checkbox value received:", gulf_stream_check)
     if 'gulf_stream' in gulf_stream_check:
         map_fig.add_trace(go.Scattermap(
             lat=gulfstreamcoords['Lat'],
