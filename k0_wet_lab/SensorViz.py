@@ -6,10 +6,10 @@ import plotly.graph_objects as go
 import dash_bootstrap_components as dbc
 import os
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
+# from sklearn.preprocessing import MinMaxScaler
 
 # Hardcode path to files and create list
-folder_path = r"\\atlas.shore.mbari.org\ProjectLibrary\901805_Coastal_Biogeochemical_Sensing\Wetlab_Sensor_Calibration\NanoFet"
+folder_path = r"\\atlas.shore.mbari.org\ProjectLibrary\901805_Coastal_Biogeochemical_Sensing\Wetlab_Sensor_Calibration\NanoFet\k0"
 
 files = [f for f in os.listdir(folder_path) if '.csv']
 
@@ -49,7 +49,7 @@ def load_latest_data(folder_path, selected_file=None, com_dict=None):
     df = pd.read_csv(filename, delimiter=",", skiprows=4)
     
     # Clean data
-    df['DateTime'] = pd.to_datetime(df['DateTime'], format='%Y-%m-%d %H:%M')
+    # df['DateTime'] = pd.to_datetime(df['DateTime'], format='%Y-%m-%d %H:%M')
     
     # Replace COM with NanoFet ID if metadata is available
     if com_dict:
@@ -93,11 +93,11 @@ def create_layout(nanofet_ids, df):
                 row_cols.append(col)
         graph_rows.append(dbc.Row(row_cols))
 
-    # Normalized comparison plot row
+    # Magnitude comparison plot row
     graph_rows.append(
         dbc.Row([
             dbc.Col([
-                dcc.Graph(id='normalized-comparison-plot', 
+                dcc.Graph(id='magnitude-comparison-plot', 
                           style={'height': 'auto', 'width': 'auto'}),
             ], width=12)
         ])
@@ -153,7 +153,7 @@ def create_multi_output_callback(nanofet_ids):
     """
     @callback(
         [Output(f'scatter-plot-{nanofet}', 'figure') for nanofet in nanofet_ids] + 
-        [Output('normalized-comparison-plot', 'figure')],
+        [Output('magnitude-comparison-plot', 'figure')],
         [Input('Deployment-Dropdown', 'value'),
          Input('x-axis-dropdown','value'),
          Input('y-axis-dropdown', 'value')]
@@ -179,15 +179,15 @@ def create_multi_output_callback(nanofet_ids):
             )
             figures.append(fig)
         
-        # Create normalized comparison plot
-        normalized_fig = create_normalized_comparison(df, x_column, y_column, current_nanofet_ids)
-        figures.append(normalized_fig)
+        # Create magnitude comparison plot
+        magnitude_fig = create_magnitude_comparison(df, y_column, current_nanofet_ids)
+        figures.append(magnitude_fig)
         
         return figures
 
     return update_graphs
 
-def create_normalized_comparison(df, x_column, y_column, nanofet_ids):
+def create_magnitude_comparison(df, y_column, nanofet_ids):
     """
     Create a normalized comparison plot across all NanoFets
     """
@@ -198,31 +198,28 @@ def create_normalized_comparison(df, x_column, y_column, nanofet_ids):
     for nanofet in nanofet_ids:
         df_nanofet = df[df['NanoFet'] == nanofet]
         
-        # Normalize data 
-        scaler = MinMaxScaler()
-        
-        # Ensure x and y columns are numeric
-        x_data = pd.to_numeric(df_nanofet[x_column], errors='coerce')
+        # Normalize data         
+        # Ensure y column is numeric, x column is always datetime.
+        x_data = df_nanofet['DateTime']
         y_data = pd.to_numeric(df_nanofet[y_column], errors='coerce')
         
-        # Only normalize if we have numeric data
-        if not x_data.empty and not y_data.empty:
-            x_normalized = scaler.fit_transform(x_data.values.reshape(-1, 1)).flatten()
-            y_normalized = scaler.fit_transform(y_data.values.reshape(-1, 1)).flatten()
+        
+        y_normalized = y_data - np.mean(y_data)
+        # y_normalized = scaler.fit_transform(y_data.values.reshape(-1, 1)).flatten()
             
-            # Add trace for this NanoFet
-            fig.add_trace(go.Scatter(
-                x=x_normalized, 
-                y=y_normalized,
-                mode='markers',
-                name=nanofet,
-                opacity=0.7
-            ))
+        # Add trace for this NanoFet
+        fig.add_trace(go.Scatter(
+            x=x_data, 
+            y=y_normalized,
+            mode='markers',
+            name=nanofet,
+            opacity=0.7
+        ))
     
     # Update layout
     fig.update_layout(
-        title=f'Normalized Comparison: {x_column} vs. {y_column}',
-        xaxis_title=f'Normalized {x_column}',
+        title=f'Normalized Comparison: {y_column} - mean {y_column}',
+        # xaxis_title=f'DateTime',
         yaxis_title=f'Normalized {y_column}',
         legend_title_text='NanoFet IDs'
     )

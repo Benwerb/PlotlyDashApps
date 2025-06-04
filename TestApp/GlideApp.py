@@ -175,7 +175,7 @@ app.layout = dbc.Container([
         ], width=6)
 ]),
 
-], fluid=True)
+], fluid=True, className='dashboard-container')
 
 # # Dynamically load file
 # @callback(
