@@ -10,34 +10,19 @@ from io import StringIO
 import re
 
 # Hardcode path to files and create list of all missions
-folder_path = "https://data.rbr-global.com/mbari/download/205880?from="
+folder_path = "\\atlas.shore.mbari.org\ProjectLibrary\901805_Coastal_Biogeochemical_Sensing\WireWalker\MBARI\data"
+file = "WW_Upcast_1Hz.txt"
 
-response = requests.get(folder_path)
-soup = BeautifulSoup(response.text, 'html.parser')
-
-# Get clean filenames without path or extension
-# Get just the filename with extension (no path)
-files = [
-    os.path.basename(a['href'])
-    for a in soup.find_all('a', href=True)
-    if 'RT.txt' in a['href']
-]
 
 # Load and clean data
-def load_latest_data(folder_path, selected_file=None):
+def load_latest_data(folder_path, file):
     """Loads the latest RT.txt file, cleans it, and returns a DataFrame."""
-    filename = selected_file if selected_file else files[-1]
-    file_url = folder_path + filename
-    file_response = requests.get(file_url)
-    file_content = StringIO(file_response.text)
-    df = pd.read_csv(file_content, delimiter="\t", skiprows=6)
+    filename = folder_path + file
+    df = pd.read_csv(filename, delimiter=",")
 
     # Clean data
-    df.columns = df.columns.str.replace('Â', '') # Issue when importing from html
-    df.replace(-1e10, pd.NA, inplace=True)
-    df.replace(-999, pd.NA, inplace=True)
     df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y')
-    df['Datetime'] = pd.to_datetime(df['mon/day/yr'] + ' ' + df['hh:mm'], format='%m/%d/%Y %H:%M')
+    df['Datetime'] = pd.to_datetime(df['mon/day/yr'] + ' ' + df['hh:mm:ss'], format='%m/%d/%Y %H:%M:%S')
     # Only calculate pHin_Canb_Delta if 'PHIN_CANYONB[Total]' exists
     if 'PHIN_CANYONB[Total]' in df.columns:
         df['pHin_Canb_Delta'] = df['pHinsitu[Total]'] - df['PHIN_CANYONB[Total]']
@@ -45,45 +30,11 @@ def load_latest_data(folder_path, selected_file=None):
         df['pHin_Canb_Delta'] = pd.NA  # Optional: Add the column as all-NA if needed     
     return df
 
-df = load_latest_data(folder_path)
+df = load_latest_data(folder_path, file)
 
 # Get min/max values for filters
 station_min, station_max = df["Station"].min(), df["Station"].max()
 date_min, date_max = df["Date"].min(), df["Date"].max() 
-
-url = 'https://ocean.weather.gov/gulf_stream_latest.txt'
-def getGulfStreamCoords(url):
-    print('running')
-    # Step 1: Retrieve the data
-
-    response = requests.get(url)
-    data = response.text
-
-    # Step 2: Locate the coordinates section
-    match = re.search(r'RMKS/1\. GULF STREAM NORTH WALL DATA FOR.*?:\s*(.*?)(?:RMKS/|$)', data, re.S)
-    if not match:
-        raise ValueError('Could not locate the Gulf Stream coordinates section.')
-    coordinates_text = match.group(1).strip()
-
-    # Step 3: Extract coordinate pairs (format like 25.5N80.1W)
-    coordinate_strings = re.findall(r'(\d+\.\d+N\d+\.\d+W)', coordinates_text)
-
-    # Step 4: Convert to decimal degrees and store in lists
-    latitudes = []
-    longitudes = []
-
-    for pair in coordinate_strings:
-        lat_str, lon_str = re.match(r'(\d+\.\d+)N(\d+\.\d+)W', pair).groups()
-        latitudes.append(float(lat_str))
-        longitudes.append(-float(lon_str))  # W longitude is negative
-
-    # Step 5: Create a pandas DataFrame
-    gulfstreamcoords = pd.DataFrame({
-        'Lat': latitudes,
-        'Lon': longitudes
-    })
-    return gulfstreamcoords
-gulfstreamcoords = getGulfStreamCoords(url)
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = [dbc.themes.FLATLY ]
@@ -105,7 +56,7 @@ app.layout = dbc.Container([
                     ], className="mb-3") for control in [
                         html.Div([
                             html.Label("Select Deployment:"),
-                            dcc.Dropdown(files, files[-1], id='Deployment-Dropdown', clearable=True),
+                            dcc.Dropdown(file, file[-1], id='Deployment-Dropdown', clearable=True),
                             html.Div(id="file-output")
                         ]),
                         html.Div([
@@ -333,7 +284,7 @@ def toggle_profile_input(selected_filter):
 
 def update_graph(filter_method, station_range, start_date, end_date, profile_number, data_quality, x_column, y_column, depth_range, gulf_stream_check, cast_direction, selected_file):
 
-    df = load_latest_data(folder_path, selected_file)
+    df = load_latest_data(folder_path, file)
 
     # Identify QF columns (columns immediately following measured values)
     qf_columns = [col for col in df.columns if 'QF' in col]
@@ -380,16 +331,6 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
         labels={"Station": "Profile"}
     )
 
-    # If Gulf Stream overlay is checked, add trace
-    if 'gulf_stream' in gulf_stream_check:
-        map_fig.add_trace(go.Scattermap(
-            lat=gulfstreamcoords['Lat'],
-            lon=gulfstreamcoords['Lon'],
-            mode='lines+markers',
-            name='Gulf Stream',
-            marker=dict(size=6, color='deepskyblue'),
-            line=dict(width=2, color='deepskyblue')
-        ))
 
     # Scatter Plot pH25atm
     scatter_fig_pHin = px.scatter(
