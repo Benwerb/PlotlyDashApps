@@ -180,7 +180,7 @@ def create_multi_output_callback(nanofet_ids):
             figures.append(fig)
         
         # Create magnitude comparison plot
-        magnitude_fig = create_magnitude_comparison(df, y_column, current_nanofet_ids)
+        magnitude_fig = create_magnitude_comparison(df, y_column, nanofet_ids)
         figures.append(magnitude_fig)
         
         return figures
@@ -189,38 +189,42 @@ def create_multi_output_callback(nanofet_ids):
 
 def create_magnitude_comparison(df, y_column, nanofet_ids):
     """
-    Create a normalized comparison plot across all NanoFets
+    Create an offset comparison plot to compare magnitude of Vrse changes across all NanoFets
     """
     # Prepare figure
     fig = go.Figure()
     
-    # Normalize data for each NanoFet
+    # Apply offset for each NanoFet to align starting points
     for nanofet in nanofet_ids:
-        df_nanofet = df[df['NanoFet'] == nanofet]
+        df_nanofet = df[df['NanoFet'] == nanofet].sort_values('DateTime')  # Sort by DateTime
         
-        # Normalize data         
-        # Ensure y column is numeric, x column is always datetime.
+        # x_data is always DateTime (no conversion needed)
         x_data = df_nanofet['DateTime']
         y_data = pd.to_numeric(df_nanofet[y_column], errors='coerce')
         
-        
-        y_normalized = y_data - np.mean(y_data)
-        # y_normalized = scaler.fit_transform(y_data.values.reshape(-1, 1)).flatten()
+        # Only process if we have data
+        if not x_data.empty and not y_data.empty:
+            # Calculate offset to align all sensors at the same starting point
+            first_value = y_data.iloc[0]  # Get first measurement for this sensor
+            target_start = 0  # Or choose a common starting value
+            offset = target_start - first_value
             
-        # Add trace for this NanoFet
-        fig.add_trace(go.Scatter(
-            x=x_data, 
-            y=y_normalized,
-            mode='markers',
-            name=nanofet,
-            opacity=0.7
-        ))
+            y_offset = y_data + offset  # Apply offset to align starting points
+            
+            # Add trace for this NanoFet
+            fig.add_trace(go.Scatter(
+                x=x_data, 
+                y=y_offset,
+                mode='markers+lines',  # Add lines to better see trends
+                name=nanofet,
+                opacity=0.7
+            ))
     
     # Update layout
     fig.update_layout(
-        title=f'Normalized Comparison: {y_column} - mean {y_column}',
-        # xaxis_title=f'DateTime',
-        yaxis_title=f'Normalized {y_column}',
+        title=f'Magnitude Comparison (Offset-Aligned): DateTime vs. {y_column}',
+        xaxis_title='DateTime',
+        yaxis_title=f'{y_column} (Offset-Aligned)',
         legend_title_text='NanoFet IDs'
     )
     
