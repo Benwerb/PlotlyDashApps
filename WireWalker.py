@@ -1,13 +1,9 @@
 import dash_bootstrap_components as dbc
-from dash import Dash, html, dash_table, dcc, callback, Output, Input, State
+from dash import Dash, html, dcc, callback, Output, Input
 import pandas as pd
 import plotly.express as px
 import os
 import plotly.graph_objects as go
-import requests
-from bs4 import BeautifulSoup
-from io import StringIO
-import re
 
 # Hardcode path to files and create list of all missions
 folder_path = r"\\atlas.shore.mbari.org\ProjectLibrary\901805_Coastal_Biogeochemical_Sensing\WireWalker\MBARI\data"
@@ -339,5 +335,4 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     return map_fig, scatter_fig_xy, Contour_Plot
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port
-    app.run(host="0.0.0.0", port=port,debug=True,dev_tools_hot_reload=True)
+    app.run(debug=True, host='0.0.0.0', port=8050)
