@@ -12,17 +12,38 @@ file_name = "WW_Upcast_1Hz.txt"
 file_path = os.path.join(folder_path, file_name)
 
 # Load and clean data
-def load_latest_data(file_path):
+def load_latest_data(file_path, downsample_factor):
     """Loads the latest RT.txt file, cleans it, and returns a DataFrame."""
-    df = pd.read_csv(file_path, delimiter=",")
-
+    df = pd.read_csv(file_path, delimiter=",",skiprows=lambda i: i != 0 and i % downsample_factor != 0)
+    
     # Clean data
+        # Add some QC data
+
+    # Make datetime
     df['Date'] = pd.to_datetime(df['mm/dd/yyyy'], format='%m/%d/%Y')
     df['Datetime'] = pd.to_datetime(df['mm/dd/yyyy'] + ' ' + df['HH:MM:SS'], format='%m/%d/%Y %H:%M:%S')
     
     return df
 
-df = load_latest_data(file_path)
+
+downsample_factor = 2 # initially set to 2 for first load
+df = load_latest_data(file_path,downsample_factor)
+
+
+# Initialize the app by loading the csv file 
+# def load_data(file_path):
+#     """Loads the latest RT.txt file, cleans it, and returns a DataFrame."""
+#     df = pd.read_csv(file_path, delimiter=",")
+    
+#     # Clean data
+#         # Add some QC data
+
+#     # Make datetime
+#     df['Date'] = pd.to_datetime(df['mm/dd/yyyy'], format='%m/%d/%Y')
+#     df['Datetime'] = pd.to_datetime(df['mm/dd/yyyy'] + ' ' + df['HH:MM:SS'], format='%m/%d/%Y %H:%M:%S')
+#     return df
+
+# df = load_data(file_path)
 
 # Get min/max values for filters
 station_min, station_max = df["Station"].min(), df["Station"].max()
@@ -41,11 +62,16 @@ app.layout = dbc.Container([
                 html.H2('MBARI WireWalker', className='text-info text-start',
                         style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}),
                 
-                # Controls
+                # Controls 
                 *[
                     dbc.Card([
                         dbc.CardBody([control])
                     ], className="mb-3") for control in [
+                        html.Div([
+                            html.Button("Refresh Data", id="refresh-btn"),
+                            # Hidden store that caches your data
+                            # dcc.Store(id="data-store",data=df.to_dict('records')),
+                        ]),
                         html.Div([
                             html.Label("Select Filter Method:"),
                             dcc.RadioItems(
@@ -127,6 +153,29 @@ app.layout = dbc.Container([
                                 value=[0, 100]
                             )
                         ]),
+                        html.Div([
+                            html.Label("Select Color Scale:"),
+                            dcc.Dropdown(
+                                id='color-scale-dropdown',
+                                options=[
+                                {'label': 'Viridis', 'value': 'Viridis'},
+                                {'label': 'Plasma', 'value': 'Plasma'},
+                                {'label': 'Cividis', 'value': 'Cividis'}
+                                ],
+                                value='Viridis'
+                            )
+                        ]),
+                        html.Div([
+                            html.Label("Select sample frq (1 sample / n seconds): "), # 1 is 1 sample per second, 2 is 1 sample per 2 seconds, etc...
+                            dcc.Input(
+                                id='downsample-factor',
+                                type='number',
+                                min=1,
+                                max=1000,
+                                placeholder=2,
+                                value=2
+                            )
+                        ]),
                     ]
                 ],
             ], style={'backgroundColor': '#e0f7fa', 'padding': '10px', 'borderRadius': '10px'})
@@ -173,6 +222,26 @@ app.layout = dbc.Container([
     ])
 ], fluid=True, className='dashboard-container')
 
+# @app.callback(
+#     [Output('data-store', 'data')],
+#     Input('refresh-btn', 'n_clicks'),
+#     Input('downsample-factor','value')
+#     prevent_initial_call=False
+# )
+# # Load and clean data
+# def load_latest_data(file_path, downsample_factor):
+#     """Loads the latest RT.txt file, cleans it, and returns a DataFrame."""
+#     df = pd.read_csv(file_path, delimiter=",",skiprows=lambda i: i != 0 and i % downsample_factor != 0)
+    
+#     # Clean data
+#         # Add some QC data
+
+#     # Make datetime
+#     df['Date'] = pd.to_datetime(df['mm/dd/yyyy'], format='%m/%d/%Y')
+#     df['Datetime'] = pd.to_datetime(df['mm/dd/yyyy'] + ' ' + df['HH:MM:SS'], format='%m/%d/%Y %H:%M:%S')
+    
+#     return df.to_dict('records')  # Store as list-of-dict
+
 @callback(
     [Output('station-range-slider', 'disabled'),
      Output('date-picker-range', 'disabled')],
@@ -180,25 +249,6 @@ app.layout = dbc.Container([
 )
 def toggle_filters(selected_filter):
     return selected_filter != 'station', selected_filter != 'date'
-
-# @callback(
-#     Output('profile-number', 'value'),
-#     Output('profile-number','min'),
-#     Output('profile-number','max'),
-#     Input('Deployment-Dropdown', 'value')
-# )
-# def update_profile_number(selected_file):
-#     df = load_latest_data(folder_path, selected_file)
-    
-#     if df.empty:
-#         return None
-
-#     station_max = df["Station"].max()
-#     station_min = df["Station"].min()
-#     return station_max, station_min, station_max  # Set to the max station of the new file
-
-# def toggle_profile_input(selected_filter):
-#     return selected_filter != 'profile'  # Disable input unless 'profile' is selected
 
 # Define variable-specific percentile limits
 def get_clim(df, color_column):
@@ -220,12 +270,16 @@ def get_clim(df, color_column):
      Input('x-axis-dropdown', 'value'),
      Input('y-axis-dropdown', 'value'),
      Input('color-axis-dropdown','value'),
-     Input('depth-slider','value'),]
+     Input('depth-slider','value'),
+     Input('color-scale-dropdown','value'),
+     Input('downsample-factor', 'value')]
 )
 
-def update_graph(filter_method, station_range, start_date, end_date, profile_number, x_column, y_column, color_column, depth_range):
+def update_graph(filter_method, station_range, start_date, end_date, profile_number, x_column, y_column, color_column, depth_range, color_scale, downsample_factor):
 
-    df = load_latest_data(file_path)
+    df = load_latest_data(file_path, downsample_factor)
+    # df = pd.DataFrame(data)
+    # filtered_df = df[::downsample_factor] # take every nth sample
 
     # Apply filter based on the selected method
     if filter_method == 'station':  # Profile Range
@@ -238,7 +292,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     depth_min, depth_max = depth_range  # Unpack values
     
     filtered_df = filtered_df[(filtered_df['Depth'] > depth_min) & (filtered_df['Depth'] < depth_max)]
-
+    
     # Create base figure
     map_fig = px.scatter_map(
         filtered_df, lat="Lat [°N]", lon="Lon [°E]",
@@ -246,6 +300,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
         map_style="satellite",
         zoom=8,
         color='Station',
+        # color_continuous_scale=color_scale,
         labels={"Station": "Profile"}
     )
 
@@ -285,7 +340,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
             mode='markers',
             marker=dict(
                 color=filtered_df['Station'],     # Use filtered_df, not df
-                colorscale='Viridis',
+                colorscale=color_scale,
                 colorbar=dict(title='Station'),   # Update title if desired
                 size=2,
                 opacity=.8
@@ -335,7 +390,8 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
         x='Datetime',
         y='Depth',
         color=color_column,
-        color_continuous_scale='Viridis',  # or other scale like 'Plasma', 'Cividis'
+        color_continuous_scale=color_scale,  # or other scale like 'Plasma', 'Cividis', 'Viridis'
+        range_color=[cmin, cmax],
         labels={color_column},
         title=f'Depth vs Time Colored by {color_column}'
     )
@@ -343,7 +399,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
    # Apply color limits and reverse depth axis
     Contour_Plot.update_layout(
         yaxis_autorange='reversed',
-        coloraxis_colorbar=dict(title=color_column)
+        coloraxis_colorbar=dict(title=color_column),
     )
 
     Contour_Plot.update_traces(marker=dict(cmin=cmin, cmax=cmax))
