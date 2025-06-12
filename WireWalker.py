@@ -1,6 +1,7 @@
 import dash_bootstrap_components as dbc
 from dash import Dash, html, dcc, callback, Output, Input
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import os
 import plotly.graph_objects as go
@@ -199,6 +200,13 @@ def toggle_filters(selected_filter):
 # def toggle_profile_input(selected_filter):
 #     return selected_filter != 'profile'  # Disable input unless 'profile' is selected
 
+# Define variable-specific percentile limits
+def get_clim(df, color_column):
+    if color_column == 'ChlorophyllA':
+        lower, upper = np.percentile(df[color_column].dropna(), [5, 99])
+    else:
+        lower, upper = np.percentile(df[color_column].dropna(), [1, 99])
+    return lower, upper
 
 @callback(
     [Output('map-plot','figure'),
@@ -260,10 +268,10 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
 
     if not valid_x_columns:
         empty_fig = go.Figure()
-        return map_fig, empty_fig
+        return map_fig, empty_fig, Contour_Plot
     if not valid_y_columns:
         empty_fig = go.Figure()
-        return map_fig, empty_fig
+        return map_fig, empty_fig, Contour_Plot
 
     # Iterate over valid x and y columns and add traces
     for i, x_col in enumerate(valid_x_columns):
@@ -318,7 +326,9 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
         }
 
     scatter_fig_xy.update_layout(layout, template="plotly_white")
-
+    
+    # Get color limits
+    cmin, cmax = get_clim(filtered_df, color_column)
 
     Contour_Plot = px.scatter(
         filtered_df,
@@ -326,11 +336,19 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
         y='Depth',
         color=color_column,
         color_continuous_scale='Viridis',  # or other scale like 'Plasma', 'Cividis'
-        labels={'pH': 'pH (total scale)'},
-        title='Depth vs Time Colored by pH'
+        labels={color_column},
+        title=f'Depth vs Time Colored by {color_column}'
+    )
+    
+   # Apply color limits and reverse depth axis
+    Contour_Plot.update_layout(
+        yaxis_autorange='reversed',
+        coloraxis_colorbar=dict(title=color_column)
     )
 
-    Contour_Plot.update_layout(yaxis_autorange='reversed')  # Depth increases downward
+    Contour_Plot.update_traces(marker=dict(cmin=cmin, cmax=cmax))
+
+    
 
     return map_fig, scatter_fig_xy, Contour_Plot
 
