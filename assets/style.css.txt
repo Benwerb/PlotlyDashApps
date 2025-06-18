@@ -20,3 +20,18 @@ p {
     margin-left: 30px;
     margin-top: 30px;
 }
+
+/* In your assets/style.css file */
+._dash-loading {
+    display: none; /* Hide the default "Loading..." */
+}
+
+body::before {
+    content: "My Custom Loading Message...";
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 9999;
+    /* Add more styling for your custom message */
+}

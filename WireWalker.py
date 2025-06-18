@@ -319,7 +319,7 @@ def toggle_slider(enabled):
      Output('clim-range-slider', 'max'),
      Output('clim-range-slider', 'step'),
      Output('clim-range-slider', 'value')],
-    [Input('data-store', 'data'),
+    [Input('data-store-filtered', 'data'),
      Input('color-axis-dropdown', 'value')]
 )
 def update_clim_slider(data, color_column):
@@ -388,7 +388,7 @@ def update_Contour(data, color_column, color_scale, clims, enable_clim_slider):
      Input('color-scale-dropdown','value')]
 )
 
-def update_graph(data, x_column, y_column, color_scale):
+def update_scatter_xy(data, x_column, y_column, color_scale):
 
     # df = load_latest_data(file_path, downsample_factor)
 
