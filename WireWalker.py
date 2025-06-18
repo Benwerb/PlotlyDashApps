@@ -29,6 +29,16 @@ def load_latest_data(file_path, downsample_factor):
 downsample_factor = 2 # initially set to 2 for first load
 df = load_latest_data(file_path,downsample_factor)
 
+# Define variable-specific percentile limits
+def get_clim(df, color_column):
+    if color_column == 'ChlorophyllA':
+        lower, upper = np.percentile(df[color_column].dropna(), [5, 99])
+    else:
+        lower, upper = np.percentile(df[color_column].dropna(), [1, 99])
+
+    step = max(round((upper - lower) / 100, 3), 0.001)
+
+    return lower, upper, step
 
 # Initialize the app by loading the csv file 
 # def load_data(file_path):
@@ -49,8 +59,11 @@ df = load_latest_data(file_path,downsample_factor)
 station_min, station_max = df["Station"].min(), df["Station"].max()
 date_min, date_max = df["Date"].min(), df["Date"].max() 
 
+# Get min/max to initialize clim adjust
+cmin, cmax, cstep = get_clim(df, 'pH')
 # Initialize the app with a Bootstrap theme
 external_stylesheets = [dbc.themes.FLATLY ]
+# external_stylesheets = [dbc.themes.DARKLY ]
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server # Required for Gunicorn
 
@@ -61,7 +74,6 @@ app.layout = dbc.Container([
             html.Div([
                 html.H2('MBARI WireWalker', className='text-info text-start',
                         style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}),
-                
                 # Controls 
                 *[
                     dbc.Card([
@@ -160,7 +172,7 @@ app.layout = dbc.Container([
                                 options=[
                                 {'label': 'Viridis', 'value': 'Viridis'},
                                 {'label': 'Plasma', 'value': 'Plasma'},
-                                {'label': 'Cividis', 'value': 'Cividis'}
+                                {'label': 'Cividis', 'value': 'Cividis'},
                                 ],
                                 value='Viridis'
                             )
@@ -176,9 +188,31 @@ app.layout = dbc.Container([
                                 value=2
                             )
                         ]),
+                        html.Div([
+                            html.Label("Manual Color Scale Range:"),
+                            dcc.RangeSlider(
+                                id='clim-range-slider',
+                                min=cmin,  # Placeholder, will be updated dynamically
+                                max=cmax,
+                                value=[cmin, cmax],
+                                step=cstep,
+                                tooltip={"placement": "bottom", "always_visible": True},
+                                marks=None,
+                                allowCross=False
+                            )
+                        ]),
+                       html.Div([
+                            html.Label("Manual Color Scale"),
+                            dcc.Checklist(
+                                id='enable-clim-slider',
+                                options=[{'label': 'Enable', 'value': 'enabled'}],
+                                value=[],
+                                labelStyle={'display': 'block'}
+                            )
+                        ])
                     ]
                 ],
-            ], style={'backgroundColor': '#e0f7fa', 'padding': '10px', 'borderRadius': '10px'})
+            ], style={'backgroundColor': '#e0f7fa', 'padding': '10px', 'borderRadius': '10px'}) #e0f7fa
         ], width=3),
 
         # RIGHT Column (Plots)
@@ -215,6 +249,8 @@ app.layout = dbc.Container([
                 ])
             ], style={
                 'backgroundColor': '#e3f2fd',
+                # 'backgroundColor': '#1e1e1e',
+                'color': 'white',
                 'padding': '10px',
                 'borderRadius': '10px'
             })
@@ -241,6 +277,25 @@ app.layout = dbc.Container([
 #     df['Datetime'] = pd.to_datetime(df['mm/dd/yyyy'] + ' ' + df['HH:MM:SS'], format='%m/%d/%Y %H:%M:%S')
     
 #     return df.to_dict('records')  # Store as list-of-dict
+@callback(
+    Output('clim-range-slider', 'disabled'),
+    Input('enable-clim-slider', 'value')
+)
+def toggle_slider(enabled):
+    return 'enabled' not in enabled
+
+@callback(
+    [Output('clim-range-slider', 'min'),
+     Output('clim-range-slider', 'max'),
+     Output('clim-range-slider', 'step'),
+     Output('clim-range-slider', 'value')],
+    [Input('color-axis-dropdown', 'value'),
+     Input('downsample-factor', 'value')]
+)
+def update_clim_slider(color_column, downsample_factor):
+    df = load_latest_data(file_path,downsample_factor)
+    cmin, cmax, cstep = get_clim(df, color_column)
+    return cmin, cmax, cstep, [cmin, cmax]
 
 @callback(
     [Output('station-range-slider', 'disabled'),
@@ -249,14 +304,6 @@ app.layout = dbc.Container([
 )
 def toggle_filters(selected_filter):
     return selected_filter != 'station', selected_filter != 'date'
-
-# Define variable-specific percentile limits
-def get_clim(df, color_column):
-    if color_column == 'ChlorophyllA':
-        lower, upper = np.percentile(df[color_column].dropna(), [5, 99])
-    else:
-        lower, upper = np.percentile(df[color_column].dropna(), [1, 99])
-    return lower, upper
 
 @callback(
     [Output('map-plot','figure'),
@@ -272,10 +319,12 @@ def get_clim(df, color_column):
      Input('color-axis-dropdown','value'),
      Input('depth-slider','value'),
      Input('color-scale-dropdown','value'),
-     Input('downsample-factor', 'value')]
+     Input('downsample-factor', 'value'),
+     Input('clim-range-slider', 'value'),
+     Input('enable-clim-slider', 'value')]
 )
 
-def update_graph(filter_method, station_range, start_date, end_date, profile_number, x_column, y_column, color_column, depth_range, color_scale, downsample_factor):
+def update_graph(filter_method, station_range, start_date, end_date, profile_number, x_column, y_column, color_column, depth_range, color_scale, downsample_factor, clims, enable_clim_slider):
 
     df = load_latest_data(file_path, downsample_factor)
     # df = pd.DataFrame(data)
@@ -303,7 +352,8 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
         # color_continuous_scale=color_scale,
         labels={"Station": "Profile"}
     )
-
+    # map_fig.update_layout(template="plotly_dark")
+    
     scatter_fig_xy = go.Figure()
 
     # Ensure x_column and y_column are always lists
@@ -323,10 +373,10 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
 
     if not valid_x_columns:
         empty_fig = go.Figure()
-        return map_fig, empty_fig, Contour_Plot
+        return map_fig, empty_fig, empty_fig
     if not valid_y_columns:
         empty_fig = go.Figure()
-        return map_fig, empty_fig, Contour_Plot
+        return map_fig, empty_fig, empty_fig
 
     # Iterate over valid x and y columns and add traces
     for i, x_col in enumerate(valid_x_columns):
@@ -382,8 +432,17 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
 
     scatter_fig_xy.update_layout(layout, template="plotly_white")
     
+
     # Get color limits
-    cmin, cmax = get_clim(filtered_df, color_column)
+    # cmin, cmax, cstep = get_clim(filtered_df, color_column)
+
+    # cmin, cmax = clims
+    
+    # Use manual slider values only if the checkbox is enabled
+    if 'enabled' in enable_clim_slider and enable_clim_slider is not None:
+        cmin, cmax = clims
+    else:
+        cmin, cmax, cstep = get_clim(filtered_df, color_column)
 
     Contour_Plot = px.scatter(
         filtered_df,
@@ -403,7 +462,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
     )
 
     Contour_Plot.update_traces(marker=dict(cmin=cmin, cmax=cmax))
-
+    Contour_Plot.update_layout(layout, template="plotly_white")
     
 
     return map_fig, scatter_fig_xy, Contour_Plot
