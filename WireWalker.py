@@ -1,5 +1,6 @@
 import dash_bootstrap_components as dbc
 from dash import Dash, html, dcc, callback, Output, Input
+from dash.exceptions import PreventUpdate
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -25,8 +26,22 @@ def load_latest_data(file_path, downsample_factor):
     
     return df
 
+def filter_dataframe(df, filter_method, station_range, start_date, end_date, profile_number, depth_range):
+    # Filter by station range, date range, or profile number
+    if filter_method == 'station':
+        df = df[(df['Station'] >= station_range[0]) & (df['Station'] <= station_range[1])]
+    elif filter_method == 'date':
+        df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
+    elif filter_method == 'profile' and profile_number is not None:
+        df = df[df['Station'] == profile_number]
+    
+    # Filter by depth range
+    df = df[(df['Depth'] >= depth_range[0]) & (df['Depth'] <= depth_range[1])]
+    
+    return df
 
-downsample_factor = 2 # initially set to 2 for first load
+downsample_init = 4
+downsample_factor = downsample_init # initially set to 2 for first load, 10 for testing
 df = load_latest_data(file_path,downsample_factor)
 
 # Define variable-specific percentile limits
@@ -40,30 +55,15 @@ def get_clim(df, color_column):
 
     return lower, upper, step
 
-# Initialize the app by loading the csv file 
-# def load_data(file_path):
-#     """Loads the latest RT.txt file, cleans it, and returns a DataFrame."""
-#     df = pd.read_csv(file_path, delimiter=",")
-    
-#     # Clean data
-#         # Add some QC data
-
-#     # Make datetime
-#     df['Date'] = pd.to_datetime(df['mm/dd/yyyy'], format='%m/%d/%Y')
-#     df['Datetime'] = pd.to_datetime(df['mm/dd/yyyy'] + ' ' + df['HH:MM:SS'], format='%m/%d/%Y %H:%M:%S')
-#     return df
-
-# df = load_data(file_path)
-
 # Get min/max values for filters
 station_min, station_max = df["Station"].min(), df["Station"].max()
 date_min, date_max = df["Date"].min(), df["Date"].max() 
 
 # Get min/max to initialize clim adjust
 cmin, cmax, cstep = get_clim(df, 'pH')
+
 # Initialize the app with a Bootstrap theme
-external_stylesheets = [dbc.themes.FLATLY ]
-# external_stylesheets = [dbc.themes.DARKLY ]
+external_stylesheets = [dbc.themes.CYBORG]
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server # Required for Gunicorn
 
@@ -72,20 +72,29 @@ app.layout = dbc.Container([
         # LEFT Column (Controls)
         dbc.Col([
             html.Div([
-                html.H2('MBARI WireWalker', className='text-info text-start',
+                html.H2('MBARI WireWalker', className='text-primary text-start',
                         style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}),
                 # Controls 
                 *[
                     dbc.Card([
-                        dbc.CardBody([control])
-                    ], className="mb-3") for control in [
+                        dbc.CardBody([control], className="text-light")
+                    ], color="secondary", outline=True, className="mb-3") for control in [
                         html.Div([
-                            html.Button("Refresh Data", id="refresh-btn"),
+                            dbc.ButtonGroup([
+                                dbc.Button("Refresh Data", id="refresh-btn", color="primary", className="flex-fill"),
+                                html.A(
+                                    dbc.Button("WireWalker Info", color="info", className="flex-fill"),
+                                    href="https://www.delmarocean.com/applications-blog/coastal-mooring",
+                                    target="_blank"
+                                )
+                            ], className="w-100 d-flex"),
+                            
                             # Hidden store that caches your data
-                            # dcc.Store(id="data-store",data=df.to_dict('records')),
+                            dcc.Store(id="data-store",data=df.to_dict('records'),storage_type='memory'),
+                            dcc.Store(id="data-store-filtered",data=[],storage_type='memory'),
                         ]),
                         html.Div([
-                            html.Label("Select Filter Method:"),
+                            html.Label("Select Filter Method:", className="text-primary mb-2"),
                             dcc.RadioItems(
                                 id='filter-method',
                                 options=[
@@ -93,23 +102,24 @@ app.layout = dbc.Container([
                                     {'label': 'Filter by Profile', 'value': 'profile'},
                                     {'label': 'Filter by Date', 'value': 'date'}
                                 ],
-                                value='station'
+                                value='station',
+                                style={'color': 'white'}
                             )
                         ]),
                         html.Div([
-                            html.Label("Station Range:"),
+                            html.Label("Station Range:", className="text-primary mb-2"),
                             dcc.RangeSlider(
                                 min=station_min,
                                 max=station_max,
-                                value=[station_max - 500, station_max],
+                                value=[station_max - 1000, station_max],
                                 id='station-range-slider',
-                                marks={},  # <- removes marks
+                                marks={},  # no marks
                                 tooltip={"placement": "bottom", "always_visible": True}
                             )
                         ], style={'width': '90%', 'margin': 'auto'}),
 
                         html.Div([
-                            html.Label("Profile:"),
+                            html.Label("Profile:", className="text-primary mb-2"),
                             dcc.Input(
                                 id='profile-number',
                                 type='number',
@@ -120,7 +130,7 @@ app.layout = dbc.Container([
                             )
                         ]),
                         html.Div([
-                            html.Label("Date Range:"),
+                            html.Label("Date Range:", className="text-primary mb-2"),
                             dcc.DatePickerRange(
                                 id='date-picker-range',
                                 min_date_allowed=date_min,
@@ -130,25 +140,7 @@ app.layout = dbc.Container([
                             )
                         ]),
                         html.Div([
-                            html.Label("Select X-axis:"),
-                            dcc.Dropdown(
-                                id='x-axis-dropdown',
-                                options=[{'label': col, 'value': col} for col in df.columns if 'QF' not in col],
-                                multi=True,
-                                value="pH"
-                            )
-                        ]),
-                        html.Div([
-                            html.Label("Select Y-axis:"),
-                            dcc.Dropdown(
-                                id='y-axis-dropdown',
-                                options=[{'label': col, 'value': col} for col in df.columns if 'QF' not in col],
-                                multi=True,
-                                value="Depth"
-                            )
-                        ]),
-                        html.Div([
-                            html.Label("Select Color-axis:"),
+                            html.Label("Select Color-axis:", className="text-primary mb-2"),
                             dcc.Dropdown(
                                 id='color-axis-dropdown',
                                 options=[{'label': col, 'value': col} for col in df.columns if 'QF' not in col],
@@ -157,7 +149,25 @@ app.layout = dbc.Container([
                             )
                         ]),
                         html.Div([
-                            html.Label("Depth Range"),
+                            html.Label("Select X-axis:", className="text-primary mb-2"),
+                            dcc.Dropdown(
+                                id='x-axis-dropdown',
+                                options=[{'label': col, 'value': col} for col in df.columns if 'QF' not in col],
+                                multi=True,
+                                value="pH"
+                            )
+                        ]),
+                        html.Div([
+                            html.Label("Select Y-axis:", className="text-primary mb-2"),
+                            dcc.Dropdown(
+                                id='y-axis-dropdown',
+                                options=[{'label': col, 'value': col} for col in df.columns if 'QF' not in col],
+                                multi=True,
+                                value="Depth"
+                            )
+                        ]),
+                        html.Div([
+                            html.Label("Depth Range", className="text-primary mb-2"),
                             dcc.RangeSlider(
                                 id='depth-slider',
                                 min=0, max=100, step=10,
@@ -166,30 +176,35 @@ app.layout = dbc.Container([
                             )
                         ]),
                         html.Div([
-                            html.Label("Select Color Scale:"),
+                            html.Label("Select Color Scale:", className="text-primary mb-2"),
                             dcc.Dropdown(
                                 id='color-scale-dropdown',
                                 options=[
                                 {'label': 'Viridis', 'value': 'Viridis'},
                                 {'label': 'Plasma', 'value': 'Plasma'},
                                 {'label': 'Cividis', 'value': 'Cividis'},
+                                {'label': 'Algae', 'value': 'algae'},
+                                {'label': 'Thermal', 'value': 'thermal'},
+                                {'label': 'Balance', 'value': 'balance'},
+                                {'label': 'Red Blue', 'value': 'rdbu'},
+                                {'label': 'Blue Red', 'value': 'bluered'},
                                 ],
                                 value='Viridis'
                             )
                         ]),
                         html.Div([
-                            html.Label("Select sample frq (1 sample / n seconds): "), # 1 is 1 sample per second, 2 is 1 sample per 2 seconds, etc...
+                            html.Label("Select sample frq (1 sample / n seconds): ", className="text-primary mb-2"), # 1 is 1 sample per second, 2 is 1 sample per 2 seconds, etc...
                             dcc.Input(
                                 id='downsample-factor',
                                 type='number',
                                 min=1,
                                 max=1000,
-                                placeholder=2,
-                                value=2
+                                placeholder=downsample_init,
+                                value=downsample_init
                             )
                         ]),
                         html.Div([
-                            html.Label("Manual Color Scale Range:"),
+                            html.Label("Manual Color Scale Range:", className="text-primary mb-2"),
                             dcc.RangeSlider(
                                 id='clim-range-slider',
                                 min=cmin,  # Placeholder, will be updated dynamically
@@ -202,17 +217,18 @@ app.layout = dbc.Container([
                             )
                         ]),
                        html.Div([
-                            html.Label("Manual Color Scale"),
+                            html.Label("Manual Color Scale", className="text-primary mb-2"),
                             dcc.Checklist(
                                 id='enable-clim-slider',
                                 options=[{'label': 'Enable', 'value': 'enabled'}],
                                 value=[],
-                                labelStyle={'display': 'block'}
+                                labelStyle={'display': 'block'},
+                                style={'color': 'white'}
                             )
                         ])
                     ]
                 ],
-            ], style={'backgroundColor': '#e0f7fa', 'padding': '10px', 'borderRadius': '10px'}) #e0f7fa
+            ], style={}) # style={'backgroundColor': '#21211F', 'padding': '10px', 'borderRadius': '10px'}) #e0f7fa
         ], width=3),
 
         # RIGHT Column (Plots)
@@ -248,8 +264,8 @@ app.layout = dbc.Container([
                     ])
                 ])
             ], style={
-                'backgroundColor': '#e3f2fd',
-                # 'backgroundColor': '#1e1e1e',
+                # 'backgroundColor': '#e3f2fd',
+                'backgroundColor': '#1e1e1e',
                 'color': 'white',
                 'padding': '10px',
                 'borderRadius': '10px'
@@ -258,25 +274,39 @@ app.layout = dbc.Container([
     ])
 ], fluid=True, className='dashboard-container')
 
-# @app.callback(
-#     [Output('data-store', 'data')],
-#     Input('refresh-btn', 'n_clicks'),
-#     Input('downsample-factor','value')
-#     prevent_initial_call=False
-# )
-# # Load and clean data
-# def load_latest_data(file_path, downsample_factor):
-#     """Loads the latest RT.txt file, cleans it, and returns a DataFrame."""
-#     df = pd.read_csv(file_path, delimiter=",",skiprows=lambda i: i != 0 and i % downsample_factor != 0)
+@app.callback(
+    Output("data-store", "data"),
+    [Input("refresh-btn", "n_clicks"),
+    Input("downsample-factor", "value")],
+    prevent_initial_call=True
+)
+def refresh_data(n_clicks, downsample_factor):
+    if downsample_factor is None:
+        raise PreventUpdate
     
-#     # Clean data
-#         # Add some QC data
+    new_df = load_latest_data(file_path, downsample_factor)
+    return new_df.to_dict('records')
 
-#     # Make datetime
-#     df['Date'] = pd.to_datetime(df['mm/dd/yyyy'], format='%m/%d/%Y')
-#     df['Datetime'] = pd.to_datetime(df['mm/dd/yyyy'] + ' ' + df['HH:MM:SS'], format='%m/%d/%Y %H:%M:%S')
+@callback(
+    Output('data-store-filtered', 'data'),
+    [Input('filter-method', 'value'),
+    Input('station-range-slider', 'value'),
+    Input('date-picker-range', 'start_date'),
+    Input('date-picker-range', 'end_date'),
+    Input('profile-number', 'value'),
+    Input('depth-slider', 'value'),
+    Input('data-store', 'data')]
+)
+def update_filtered_data(filter_method, station_range, start_date, end_date, profile_number, depth_range, raw_data):
+    if not raw_data:
+        return []
+
+    df = pd.DataFrame(raw_data)
+    df_filtered = filter_dataframe(df, filter_method, station_range, start_date, end_date, profile_number, depth_range)
     
-#     return df.to_dict('records')  # Store as list-of-dict
+    return df_filtered.to_dict('records')
+
+
 @callback(
     Output('clim-range-slider', 'disabled'),
     Input('enable-clim-slider', 'value')
@@ -289,11 +319,12 @@ def toggle_slider(enabled):
      Output('clim-range-slider', 'max'),
      Output('clim-range-slider', 'step'),
      Output('clim-range-slider', 'value')],
-    [Input('color-axis-dropdown', 'value'),
-     Input('downsample-factor', 'value')]
+    [Input('data-store', 'data'),
+     Input('color-axis-dropdown', 'value')]
 )
-def update_clim_slider(color_column, downsample_factor):
-    df = load_latest_data(file_path,downsample_factor)
+def update_clim_slider(data, color_column):
+    columns = {color_column}
+    df = pd.DataFrame(data)[list(columns)]
     cmin, cmax, cstep = get_clim(df, color_column)
     return cmin, cmax, cstep, [cmin, cmax]
 
@@ -306,53 +337,63 @@ def toggle_filters(selected_filter):
     return selected_filter != 'station', selected_filter != 'date'
 
 @callback(
-    [Output('map-plot','figure'),
-     Output('scatter-plot-xy','figure'),
-     Output('contour-plot', 'figure')],
-    [Input('filter-method', 'value'),
-     Input('station-range-slider', 'value'),
-     Input('date-picker-range', 'start_date'),
-     Input('date-picker-range', 'end_date'),
-     Input('profile-number', 'value'),
-     Input('x-axis-dropdown', 'value'),
-     Input('y-axis-dropdown', 'value'),
+    Output('contour-plot', 'figure'),
+    [Input('data-store-filtered','data'),
      Input('color-axis-dropdown','value'),
-     Input('depth-slider','value'),
      Input('color-scale-dropdown','value'),
-     Input('downsample-factor', 'value'),
      Input('clim-range-slider', 'value'),
      Input('enable-clim-slider', 'value')]
 )
 
-def update_graph(filter_method, station_range, start_date, end_date, profile_number, x_column, y_column, color_column, depth_range, color_scale, downsample_factor, clims, enable_clim_slider):
+def update_Contour(data, color_column, color_scale, clims, enable_clim_slider):
+    
+    # columns = {color_column, "Datetime", "Depth", "Station"}
+    # df = pd.DataFrame(data)[list(columns)]
+    df = pd.DataFrame(data) 
 
-    df = load_latest_data(file_path, downsample_factor)
-    # df = pd.DataFrame(data)
-    # filtered_df = df[::downsample_factor] # take every nth sample
+    # Use manual slider values only if the checkbox is enabled
+    if 'enabled' in enable_clim_slider and enable_clim_slider is not None:
+        cmin, cmax = clims
+    else:
+        cmin, cmax, cstep = get_clim(df, color_column)
 
-    # Apply filter based on the selected method
-    if filter_method == 'station':  # Profile Range
-        filtered_df = df[(df["Station"] >= station_range[0]) & (df["Station"] <= station_range[1])]
-    elif filter_method == 'date':  # Date Range
-        filtered_df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
-    else:  # Profile number
-        filtered_df = df[df["Station"] == profile_number] if profile_number is not None else df
-    
-    depth_min, depth_max = depth_range  # Unpack values
-    
-    filtered_df = filtered_df[(filtered_df['Depth'] > depth_min) & (filtered_df['Depth'] < depth_max)]
-    
-    # Create base figure
-    map_fig = px.scatter_map(
-        filtered_df, lat="Lat [°N]", lon="Lon [°E]",
-        hover_name="Station",
-        map_style="satellite",
-        zoom=8,
-        color='Station',
-        # color_continuous_scale=color_scale,
-        labels={"Station": "Profile"}
+    Contour_Plot = px.scatter(
+        df,
+        x='Datetime',
+        y='Depth',
+        color=color_column,
+        color_continuous_scale=color_scale,  # or other scale like 'Plasma', 'Cividis', 'Viridis'
+        range_color=[cmin, cmax],
+        labels={color_column},
+        title=f'Depth vs Time Colored by {color_column}'
     )
-    # map_fig.update_layout(template="plotly_dark")
+    
+   # Apply color limits and reverse depth axis
+    Contour_Plot.update_layout(
+        yaxis_autorange='reversed',
+        coloraxis_colorbar=dict(title=color_column),
+    )
+
+    Contour_Plot.update_traces(marker=dict(cmin=cmin, cmax=cmax))
+    Contour_Plot.update_layout(template="plotly_dark")
+    
+
+    return Contour_Plot
+
+@callback(
+     Output('scatter-plot-xy','figure'),
+    [Input('data-store-filtered','data'),
+     Input('x-axis-dropdown', 'value'),
+     Input('y-axis-dropdown', 'value'),
+     Input('color-scale-dropdown','value')]
+)
+
+def update_graph(data, x_column, y_column, color_scale):
+
+    # df = load_latest_data(file_path, downsample_factor)
+
+    columns = {x_column, y_column, "Datetime", "Depth", "Station"}
+    df = pd.DataFrame(data)[list(columns)]
     
     scatter_fig_xy = go.Figure()
 
@@ -368,15 +409,15 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
         y_columns = y_column  # Already a list
 
     # Filter out invalid columns
-    valid_x_columns = [x for x in x_columns if x in filtered_df.columns]
-    valid_y_columns = [y for y in y_columns if y in filtered_df.columns]
+    valid_x_columns = [x for x in x_columns if x in df.columns]
+    valid_y_columns = [y for y in y_columns if y in df.columns]
 
     if not valid_x_columns:
         empty_fig = go.Figure()
-        return map_fig, empty_fig, empty_fig
+        return empty_fig
     if not valid_y_columns:
         empty_fig = go.Figure()
-        return map_fig, empty_fig, empty_fig
+        return empty_fig
 
     # Iterate over valid x and y columns and add traces
     for i, x_col in enumerate(valid_x_columns):
@@ -385,17 +426,17 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
             yaxis_name = "y" if j == 0 else f"y{j+1}"
 
             scatter_fig_xy.add_trace(go.Scatter(
-            x=filtered_df[x_col],
-            y=filtered_df[y_col],
+            x=df[x_col],
+            y=df[y_col],
             mode='markers',
             marker=dict(
-                color=filtered_df['Station'],     # Use filtered_df, not df
+                color=df['Station'],
                 colorscale=color_scale,
-                colorbar=dict(title='Station'),   # Update title if desired
+                colorbar=dict(title='Station'),
                 size=2,
                 opacity=.8
             ),
-            name=f"{x_col} vs {y_col}",           # Comma was missing here
+            name=f"{x_col} vs {y_col}",
             xaxis=xaxis_name,
             yaxis=yaxis_name
         ))
@@ -430,42 +471,33 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
             "position": 1 - (j - 1) * 0.1,  # Move each additional y-axis further right
         }
 
-    scatter_fig_xy.update_layout(layout, template="plotly_white")
-    
+    scatter_fig_xy.update_layout(layout, template="plotly_dark")
 
-    # Get color limits
-    # cmin, cmax, cstep = get_clim(filtered_df, color_column)
+    return scatter_fig_xy
 
-    # cmin, cmax = clims
-    
-    # Use manual slider values only if the checkbox is enabled
-    if 'enabled' in enable_clim_slider and enable_clim_slider is not None:
-        cmin, cmax = clims
-    else:
-        cmin, cmax, cstep = get_clim(filtered_df, color_column)
+@callback(
+    Output('map-plot','figure'),
+    Input('data-store-filtered','data')
+)
 
-    Contour_Plot = px.scatter(
-        filtered_df,
-        x='Datetime',
-        y='Depth',
-        color=color_column,
-        color_continuous_scale=color_scale,  # or other scale like 'Plasma', 'Cividis', 'Viridis'
-        range_color=[cmin, cmax],
-        labels={color_column},
-        title=f'Depth vs Time Colored by {color_column}'
+def update_map(data):
+
+    # df = load_latest_data(file_path, downsample_factor)
+
+    columns = {"Datetime", "Depth", "Station", "Lat [°N]", "Lon [°E]"}
+    df = pd.DataFrame(data)[list(columns)].iloc[[0]]  # All lat/lon are the same in this file
+
+    # Create base figure
+    map_fig = px.scatter_map(
+        df, lat="Lat [°N]", lon="Lon [°E]",
+        hover_name="Station",
+        map_style="satellite",
+        zoom=8,
+        # color='Station',
+        # labels={"Station": "Profile"}
     )
-    
-   # Apply color limits and reverse depth axis
-    Contour_Plot.update_layout(
-        yaxis_autorange='reversed',
-        coloraxis_colorbar=dict(title=color_column),
-    )
-
-    Contour_Plot.update_traces(marker=dict(cmin=cmin, cmax=cmax))
-    Contour_Plot.update_layout(layout, template="plotly_white")
-    
-
-    return map_fig, scatter_fig_xy, Contour_Plot
+    map_fig.update_layout(template="plotly_dark")
+    return map_fig
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8050)
