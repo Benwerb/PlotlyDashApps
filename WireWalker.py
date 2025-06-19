@@ -188,6 +188,8 @@ app.layout = dbc.Container([
                                 {'label': 'Balance', 'value': 'balance'},
                                 {'label': 'Red Blue', 'value': 'rdbu'},
                                 {'label': 'Blue Red', 'value': 'bluered'},
+                                {'label': 'Solid Cyan', 'value': [[0, '#00FFFF'], [1, '#00FFFF']]},
+                                {'label': 'None', 'value': 'None'},
                                 ],
                                 value='Viridis'
                             )
@@ -391,55 +393,76 @@ def update_Contour(data, color_column, color_scale, clims, enable_clim_slider):
 def update_scatter_xy(data, x_column, y_column, color_scale):
 
     # df = load_latest_data(file_path, downsample_factor)
-
-    columns = {x_column, y_column, "Datetime", "Depth", "Station"}
-    df = pd.DataFrame(data)[list(columns)]
     
     scatter_fig_xy = go.Figure()
 
-    # Ensure x_column and y_column are always lists
-    if isinstance(x_column, str):
-        x_columns = [x_column]  # Convert single selection to list
-    else:
-        x_columns = x_column  # Already a list
+    # Ensure x_column and y_column are lists
+    x_columns = [x_column] if isinstance(x_column, str) else x_column
+    y_columns = [y_column] if isinstance(y_column, str) else y_column
 
-    if isinstance(y_column, str):
-        y_columns = [y_column]  # Convert single selection to list
-    else:
-        y_columns = y_column  # Already a list
+    # Combine all columns needed
+    columns = x_columns + y_columns + ["Datetime", "Depth", "Station"]
 
-    # Filter out invalid columns
+    # Remove duplicates while preserving order
+    columns = list(dict.fromkeys(columns))
+
+    # Convert input data to DataFrame and keep only valid columns
+    df = pd.DataFrame(data)
+    columns = [col for col in columns if col in df.columns]  # filter out missing
+    df = df[columns]
+
+    # Filter out invalid x/y columns
     valid_x_columns = [x for x in x_columns if x in df.columns]
     valid_y_columns = [y for y in y_columns if y in df.columns]
 
-    if not valid_x_columns:
-        empty_fig = go.Figure()
-        return empty_fig
-    if not valid_y_columns:
-        empty_fig = go.Figure()
-        return empty_fig
+    # Return empty figure if no valid axes
+    if not valid_x_columns or not valid_y_columns:
+        return go.Figure()
 
-    # Iterate over valid x and y columns and add traces
-    for i, x_col in enumerate(valid_x_columns):
-        for j, y_col in enumerate(valid_y_columns):
-            xaxis_name = "x" if i == 0 else f"x{i+1}"
-            yaxis_name = "y" if j == 0 else f"y{j+1}"
+    if color_scale == 'None':
+        # Iterate over valid x and y columns and add traces
+        for i, x_col in enumerate(valid_x_columns):
+            for j, y_col in enumerate(valid_y_columns):
+                xaxis_name = "x" if i == 0 else f"x{i+1}"
+                yaxis_name = "y" if j == 0 else f"y{j+1}"
 
-            scatter_fig_xy.add_trace(go.Scatter(
-            x=df[x_col],
-            y=df[y_col],
-            mode='markers',
-            marker=dict(
-                color=df['Station'],
-                colorscale=color_scale,
-                colorbar=dict(title='Station'),
-                size=2,
-                opacity=.8
-            ),
-            name=f"{x_col} vs {y_col}",
-            xaxis=xaxis_name,
-            yaxis=yaxis_name
-        ))
+                scatter_fig_xy.add_trace(go.Scatter(
+                x=df[x_col],
+                y=df[y_col],
+                mode='markers',
+                marker=dict(
+                    # color=df['Station'],
+                    # colorscale=color_scale,
+                    # colorbar=dict(title='Station'),
+                    size=2,
+                    opacity=.8
+                ),
+                name=f"{x_col} vs {y_col}",
+                xaxis=xaxis_name,
+                yaxis=yaxis_name
+            ))
+    else:
+        # Iterate over valid x and y columns and add traces
+        for i, x_col in enumerate(valid_x_columns):
+            for j, y_col in enumerate(valid_y_columns):
+                xaxis_name = "x" if i == 0 else f"x{i+1}"
+                yaxis_name = "y" if j == 0 else f"y{j+1}"
+
+                scatter_fig_xy.add_trace(go.Scatter(
+                x=df[x_col],
+                y=df[y_col],
+                mode='markers',
+                marker=dict(
+                    color=df['Station'],
+                    colorscale=color_scale,
+                    colorbar=dict(title='Station'),
+                    size=2,
+                    opacity=.8
+                ),
+                name=f"{x_col} vs {y_col}",
+                xaxis=xaxis_name,
+                yaxis=yaxis_name
+            ))
 
 
     # Define layout with multiple x- and y-axes
@@ -500,4 +523,4 @@ def update_map(data):
     return map_fig
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8050)
+    app.run(debug=False, host='0.0.0.0', port=8050)
