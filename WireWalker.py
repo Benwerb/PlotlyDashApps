@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import Dash, html, dcc, callback, Output, Input
+from dash import Dash, html, dcc, callback, Output, Input, State
 from dash.exceptions import PreventUpdate
 import pandas as pd
 import numpy as np
@@ -92,6 +92,9 @@ app.layout = dbc.Container([
                             # Hidden store that caches your data
                             dcc.Store(id="data-store",data=df.to_dict('records'),storage_type='memory'),
                             dcc.Store(id="data-store-filtered",data=[],storage_type='memory'),
+                        ]),
+                        html.Div([
+                            html.Label(id='last-update-text', className="text-primary mb-2"),
                         ]),
                         html.Div([
                             html.Label("Select Filter Method:", className="text-primary mb-2"),
@@ -189,7 +192,7 @@ app.layout = dbc.Container([
                                 {'label': 'Red Blue', 'value': 'rdbu'},
                                 {'label': 'Blue Red', 'value': 'bluered'},
                                 {'label': 'Solid Cyan', 'value': [[0, '#00FFFF'], [1, '#00FFFF']]},
-                                {'label': 'None', 'value': 'None'},
+                                # {'label': 'None', 'value': 'None'},
                                 ],
                                 value='Viridis'
                             )
@@ -276,6 +279,23 @@ app.layout = dbc.Container([
     ])
 ], fluid=True, className='dashboard-container')
 
+@callback(
+    Output('last-update-text', 'children'),
+    Input('data-store', 'data')
+)
+def show_last_update(data):
+    if not data:
+        return "No data loaded"
+    
+    df = pd.DataFrame(data)
+    latest = df['Datetime'].max()
+    
+    # Parse as datetime and localize
+    latest = pd.to_datetime(latest).tz_localize('UTC').tz_convert('America/Los_Angeles')
+    
+    return f"Updated: {latest.strftime('%Y-%m-%d %H:%M:%S %Z')}"
+
+
 @app.callback(
     Output("data-store", "data"),
     [Input("refresh-btn", "n_clicks"),
@@ -289,24 +309,43 @@ def refresh_data(n_clicks, downsample_factor):
     new_df = load_latest_data(file_path, downsample_factor)
     return new_df.to_dict('records')
 
+# @callback(
+#     Output('data-store-filtered', 'data'),
+#     [Input('filter-method', 'value'),
+#     Input('station-range-slider', 'value'),
+#     Input('date-picker-range', 'start_date'),
+#     Input('date-picker-range', 'end_date'),
+#     Input('profile-number', 'value'),
+#     Input('depth-slider', 'value'),
+#     Input('data-store', 'data')]
+# )
+# def update_filtered_data(filter_method, station_range, start_date, end_date, profile_number, depth_range, raw_data):
+#     if not raw_data:
+#         return []
+
+#     df = pd.DataFrame(raw_data)
+#     df_filtered = filter_dataframe(df, filter_method, station_range, start_date, end_date, profile_number, depth_range)
+    
+#     return df_filtered.to_dict('records')
+
 @callback(
     Output('data-store-filtered', 'data'),
-    [Input('filter-method', 'value'),
-    Input('station-range-slider', 'value'),
-    Input('date-picker-range', 'start_date'),
-    Input('date-picker-range', 'end_date'),
-    Input('profile-number', 'value'),
-    Input('depth-slider', 'value'),
-    Input('data-store', 'data')]
+    Input('data-store', 'data'),
+    State('filter-method', 'value'),
+    State('station-range-slider', 'value'),
+    State('date-picker-range', 'start_date'),
+    State('date-picker-range', 'end_date'),
+    State('profile-number', 'value'),
+    State('depth-slider', 'value')
 )
-def update_filtered_data(filter_method, station_range, start_date, end_date, profile_number, depth_range, raw_data):
+def update_filtered_data(raw_data, filter_method, station_range, start_date, end_date, profile_number, depth_range):
     if not raw_data:
         return []
 
     df = pd.DataFrame(raw_data)
     df_filtered = filter_dataframe(df, filter_method, station_range, start_date, end_date, profile_number, depth_range)
-    
     return df_filtered.to_dict('records')
+
 
 
 @callback(
