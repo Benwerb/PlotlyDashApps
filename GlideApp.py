@@ -147,10 +147,12 @@ app.layout = dbc.Container([
                         html.Div([
                             html.Label("Station Range:"),
                             dcc.RangeSlider(
-                                min=station_min, max=station_max, step=1,
-                                marks={i: str(i) for i in range(int(station_min), int(station_max) + 1, 10)},
+                                min=station_min,
+                                max=station_max,
                                 value=[station_min, station_max],
-                                id='station-range-slider'
+                                id='station-range-slider',
+                                marks = {},
+                                tooltip={"placement": "bottom", "always_visible": True}
                             )
                         ]),
                         html.Div([
@@ -261,7 +263,6 @@ app.layout = dbc.Container([
     [Output('station-range-slider', 'min'),
      Output('station-range-slider', 'max'),
      Output('station-range-slider', 'value'),
-     Output('station-range-slider', 'marks'),
      Output('date-picker-range', 'min_date_allowed'),
      Output('date-picker-range', 'max_date_allowed'),
      Output('date-picker-range', 'start_date'),
@@ -275,9 +276,9 @@ def update_file(selected_file):
     # Get new min/max values for filters
     station_min, station_max = df["Station"].min(), df["Station"].max()
     date_min, date_max = df["Date"].min(), df["Date"].max()
-    new_marks = {int(i): str(int(i)) for i in range(int(station_min), int(station_max) + 1, 5)}
+    # new_marks = {int(i): str(int(i)) for i in range(int(station_min), int(station_max) + 1, 5)}
     # Return updated values for filters
-    return station_min, station_max, [max(station_min, station_max - 10), station_max], new_marks, date_min, date_max, date_min, date_max
+    return station_min, station_max, [max(station_min, station_max - 10), station_max], date_min, date_max, date_min, date_max
 
 
 @callback(
@@ -486,7 +487,7 @@ def update_graph(filter_method, station_range, start_date, end_date, profile_num
                 mode='markers',
                 name=f"{x_col} vs {y_col}",
                 xaxis=xaxis_name,
-                yaxis=yaxis_name
+                yaxis=yaxis_name,
             ))
 
     # Define layout with multiple x- and y-axes
