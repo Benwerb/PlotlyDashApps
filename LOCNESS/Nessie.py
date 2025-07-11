@@ -13,29 +13,40 @@ from data_loader import GliderDataLoader, GulfStreamLoader
 import datetime as dt
 
 def get_first_10_pH_average(df_latest):
-    df_MLD_average = df_latest.drop_duplicates(subset=['Station'], keep='first').copy()
+    df_MLD_average = df_latest.drop_duplicates(subset=['Station', 'Cruise'], keep='first').copy()
 
     # Initialize new columns
     df_MLD_average['pHinsitu[Total]'] = np.nan
     df_MLD_average['Chl_a[mg/m^3]'] = np.nan
 
-    for station in df_latest['Station'].unique():
-        station_data = df_latest[df_latest['Station'] == station]
-        first_10 = station_data.head(5)
+    # Group by both Station and Cruise
+    for (station, cruise), group in df_latest.groupby(['Station', 'Cruise']):
+        first_10 = group.head(5)
         
         if 'pHinsitu[Total]' in first_10.columns:
             avg_pH = first_10['pHinsitu[Total]'].mean()
             avg_chl = first_10['Chl_a[mg/m^3]'].mean()
             
-            # Add directly to DataFrame
-            mask = df_MLD_average['Station'] == station
+            # Add directly to DataFrame using both Station and Cruise
+            mask = (df_MLD_average['Station'] == station) & (df_MLD_average['Cruise'] == cruise)
             df_MLD_average.loc[mask, 'pHinsitu[Total]'] = avg_pH
             df_MLD_average.loc[mask, 'Chl_a[mg/m^3]'] = avg_chl
 
     # Keep only the columns you want
-    df_MLD_average = df_MLD_average[['Station', 'Lat [°N]', 'Lon [°E]', 'pHinsitu[Total]', 'Chl_a[mg/m^3]']]
+    df_MLD_average = df_MLD_average[['Station', 'Cruise', 'Lat [°N]', 'Lon [°E]', 'pHinsitu[Total]', 'Chl_a[mg/m^3]']]
 
     return df_MLD_average
+
+# Define variable-specific percentile limits
+def get_clim(df, color_column):
+    if color_column == 'ChlorophyllA':
+        lower, upper = np.percentile(df[color_column].dropna(), [5, 99])
+    else:
+        lower, upper = np.percentile(df[color_column].dropna(), [1, 99])
+
+    step = max(round((upper - lower) / 100, 3), 0.001)
+
+    return lower, upper, step
 
 gs = GulfStreamLoader()
 GulfStreamBounds = gs.load_data()
@@ -46,7 +57,7 @@ app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server # Required for Gunicorn
 
 
-loader = GliderDataLoader()
+loader = GliderDataLoader(filenames=['25420901RT.txt', '25520301RT.txt'])
 # Load the most recent file (automatically done if no filename provided)
 df_latest = loader.load_data()
 station_min, station_max = df_latest["Station"].min(), df_latest["Station"].max()
@@ -67,7 +78,7 @@ app.layout = dbc.Container([
                             id='map-plot',
                             style={'height': '70vh', 'width': '100%'}
                         ),
-                        dcc.Interval(id="interval-refresh", interval=60*1000, n_intervals=0)  # every 60 sec
+                        dcc.Interval(id="interval-refresh", interval=60*1000*5, n_intervals=0)  # every 5 minutes
                     ])
                 ]),
                 # Range slider
@@ -96,14 +107,14 @@ app.layout = dbc.Container([
                     dbc.CardBody([
                         html.H4("Assets:"),
                         dcc.Checklist(
-                                id='SN209',
-                                options=[{'label': 'SN209', 'value': 'overlay'}],
+                                id='SN203',
+                                options=[{'label': 'SN203', 'value': 'overlay'}],
                                 value=['overlay'],
                                 labelStyle={'display': 'block'}
                             ),
                         dcc.Checklist(
-                                id='SN210',
-                                options=[{'label': 'SN210', 'value': 'overlay'}],
+                                id='SN209',
+                                options=[{'label': 'SN209', 'value': 'overlay'}],
                                 value=[],
                                 labelStyle={'display': 'block'}
                             ),
@@ -214,24 +225,30 @@ app.layout = dbc.Container([
     Output('map-plot','figure'),
     [Input("interval-refresh", "n_intervals"),
      Input('Parameters', 'value'),
-     Input('gsbounds','value')]
+     Input('gsbounds','value'),
+     Input('SN203', 'value')]
 )
-def update_map(n, selected_parameter, gs_overlay):
+def update_map(n, selected_parameter, gs_overlay, SN203):
     df_latest = loader.load_data()
     df_map = get_first_10_pH_average(df_latest)
+    if 'overlay' in SN203:
+        df_map_filter = df_map[df_map["Cruise"].astype(str).str.contains("203")]
+    else:
+        df_map_filter = df_map
+    cmin, cmax, cstep = get_clim(df_map, selected_parameter)
 
-    if isinstance(loader.file_list, list):
-        # Create base figure
-        map_fig = px.scatter_map(
-            df_map, lat="Lat [°N]", lon="Lon [°E]",
-            map_style="satellite",
-            zoom=8,
-            color=selected_parameter,
-            hover_name=selected_parameter
-            # labels={"Station": "Profile"}
-            
-        )
-    map_fig.update_layout(legend_title='Spray209')
+    # Create base figure
+    map_fig = px.scatter_map(
+        df_map_filter, lat="Lat [°N]", lon="Lon [°E]",
+        map_style="satellite",
+        zoom=8,
+        color=selected_parameter,
+        hover_name=selected_parameter,
+        range_color=[cmin, cmax],
+        # labels={"Station": "Profile"}
+        
+    )
+    map_fig.update_layout(legend_title='Spray203')
     
     # If Gulf Stream overlay is checked, add trace
     if 'overlay' in gs_overlay:
@@ -256,30 +273,28 @@ def update_pHin_plot(n):
         df_latest, x="pHinsitu[Total]", y="Depth[m]",
         labels={"pHinsitu[Total]", "Depth[m]", "Profile"},
         title=f"pHinsitu[Total] vs. Depth[m]",
-        template="plotly_white",
         color='Station'
     )
     scatter_fig_pHin.update_yaxes(autorange="reversed")
-    
+
     return scatter_fig_pHin
 
-@app.callback(
-    Output('doxy-plot','figure'),
-    [Input("interval-refresh", "n_intervals")]
-)
-def update_doxy_plot(n):
-    df_latest = loader.load_data()
+# @app.callback(
+#     Output('doxy-plot','figure'),
+#     [Input("interval-refresh", "n_intervals")]
+# )
+# def update_doxy_plot(n):
+#     df_latest = loader.load_data()
 
-    scatter_fig_doxy = px.scatter(
-        df_latest, x="Oxygen[µmol/kg]", y="Depth[m]",
-        labels={"Oxygen[µmol/kg]", "Depth[m]", "Profile"},
-        title=f"Oxygen[µmol/kg] vs. Depth[m]",
-        template="plotly_white",
-        color='Station'
-    )
-    scatter_fig_doxy.update_yaxes(autorange="reversed")
+#     scatter_fig_doxy = px.scatter(
+#         df_latest, x="Oxygen[µmol/kg]", y="Depth[m]",
+#         labels={"Oxygen[µmol/kg]", "Depth[m]", "Profile"},
+#         title=f"Oxygen[µmol/kg] vs. Depth[m]",
+#         color='Station'
+#     )
+#     scatter_fig_doxy.update_yaxes(autorange="reversed")
     
-    return scatter_fig_doxy
+#     return scatter_fig_doxy
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port

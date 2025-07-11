@@ -50,10 +50,10 @@ class GliderDataLoader:
         Load and clean all initialized files.
 
         Returns:
-            dict of {filename: DataFrame} if multiple files,
-            or a single DataFrame if only one file.
+            A single concatenated DataFrame from all files.
         """
-        results = {}
+        dfs = []
+
         for fname in self.file_list:
             file_url = self.folder_url + fname
             file_response = requests.get(file_url)
@@ -74,9 +74,10 @@ class GliderDataLoader:
             else:
                 df['pHin_Canb_Delta'] = pd.NA
 
-            results[fname] = df
+            df['source_file'] = fname  # optional: keep track of file origin
+            dfs.append(df)
 
-        return list(results.values())[0] if len(results) == 1 else results
+        return pd.concat(dfs, ignore_index=True)
 
 class GulfStreamLoader:
     def __init__(self):
