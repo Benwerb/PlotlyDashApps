@@ -69,6 +69,8 @@ class GliderDataLoader:
                 format='%m/%d/%Y %H:%M',
                 errors='coerce'
             )
+            # Add Unix timestamp (seconds since epoch)
+            df['UnixTimestamp'] = df['Datetime'].astype('int64') // 10**9
             if 'PHIN_CANYONB[Total]' in df.columns and 'pHinsitu[Total]' in df.columns:
                 df['pHin_Canb_Delta'] = df['pHinsitu[Total]'] - df['PHIN_CANYONB[Total]']
             else:
