@@ -2,7 +2,7 @@ import os
 import requests
 import pandas as pd
 from io import StringIO
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 import re
 
 class GliderDataLoader:
@@ -31,9 +31,9 @@ class GliderDataLoader:
         response = requests.get(self.folder_url)
         soup = BeautifulSoup(response.text, 'html.parser')
         files = [
-            os.path.basename(a['href'])
+            os.path.basename(str(a['href']))
             for a in soup.find_all('a', href=True)
-            if 'RT.txt' in a['href']
+            if isinstance(a, Tag) and 'RT.txt' in str(a['href'])
         ]
         return sorted(files)
 

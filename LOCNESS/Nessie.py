@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import Dash, html, dash_table, dcc, callback, Output, Input, State
+from dash import dash, Dash, html, dash_table, dcc, callback, Output, Input, State
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -11,6 +11,7 @@ from io import StringIO
 import re
 from data_loader import GliderDataLoader, GulfStreamLoader
 import datetime as dt
+from typing import cast, List, Dict, Any
 
 def get_first_10_pH_average(df_latest):
     df_MLD_average = df_latest.drop_duplicates(subset=['Station', 'Cruise'], keep='first').copy()
@@ -36,6 +37,39 @@ def get_first_10_pH_average(df_latest):
     df_MLD_average = df_MLD_average[['Station', 'Cruise', 'Lat [°N]', 'Lon [°E]', 'pHinsitu[Total]', 'Chl_a[mg/m^3]']]
 
     return df_MLD_average
+
+def get_MLD_avg(df):
+    """
+    For each (Cruise, Station) group, compute the mean pHinsitu[Total] and Chl_a[mg/m^3] for rows where
+    Sigma_theta[kg/m^3] is between sigma_surface (minimum in group) and sigma_surface+0.03.
+    Also compute the mixed layer depth (MLD) as the difference between max and min depth in the mask.
+    Returns a DataFrame with columns:
+    ['Station', 'Cruise', 'Lat [°N]', 'Lon [°E]', 'pHinsitu[Total]', 'Chl_a[mg/m^3]', 'MLD']
+    """
+    results = []
+    for (cruise, station), group in df.groupby(['Cruise', 'Station']):
+        if 'Sigma_theta[kg/m^3]' not in group.columns or 'pHinsitu[Total]' not in group.columns:
+            continue
+        sigma_surface = group['Sigma_theta[kg/m^3]'].min()
+        mask = (group['Sigma_theta[kg/m^3]'] >= sigma_surface) & (group['Sigma_theta[kg/m^3]'] <= sigma_surface + 0.03)
+        mean_pH = group.loc[mask, 'pHinsitu[Total]'].mean()
+        mean_chl = group.loc[mask, 'Chl_a[mg/m^3]'].mean() if 'Chl_a[mg/m^3]' in group.columns else np.nan
+        lat = group['Lat [°N]'].iloc[0] if 'Lat [°N]' in group.columns else np.nan
+        lon = group['Lon [°E]'].iloc[0] if 'Lon [°E]' in group.columns else np.nan
+        if 'Depth[m]' in group.columns and mask.any():
+            mld = group.loc[mask, 'Depth[m]'].max() - group.loc[mask, 'Depth[m]'].min()
+        else:
+            mld = np.nan
+        results.append({
+            'Station': station,
+            'Cruise': cruise,
+            'Lat [°N]': lat,
+            'Lon [°E]': lon,
+            'pHinsitu[Total]': mean_pH,
+            'Chl_a[mg/m^3]': mean_chl,
+            'MLD': mld
+        })
+    return pd.DataFrame(results)
 # Define variable-specific percentile limits
 def get_clim(df, color_column):
     if color_column == 'ChlorophyllA':
@@ -212,7 +246,7 @@ glider_ids = ['SN203', 'SN209', 'SN070', 'SN0075']
 # glider_ids = ['203', '209', '070', '075']
 
 # Initialize the app with a Bootstrap theme
-external_stylesheets = [dbc.themes.FLATLY ]
+external_stylesheets = cast(List[str | Dict[str, Any]], [dbc.themes.FLATLY])
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server # Required for Gunicorn
 
@@ -229,9 +263,8 @@ marks = range_slider_marks(df_latest, 20)
 app.layout = dbc.Container([
     # Top row - Map
     dbc.Row([
-        
         html.H2('NESSIE', className='text-info text-start',
-                        style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}),
+                style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}),
         dbc.Col([
             html.Div([
                 # Map plot
@@ -254,21 +287,21 @@ app.layout = dbc.Container([
                         step=3600, # 1 hour
                         value=[unix_max_minus_12hrs, unix_max],
                         marks=marks,
+                        allowCross=False,
                         # tooltip={"placement": "bottom", "always_visible": False}
                     )
                 ], style={'padding': '20px 10px', 'margin-top': '10px'})
             ], style={'padding': '10px', 'backgroundColor': '#e3f2fd'})
         ], width=12)
     ]),
-    
     # Bottom row - Settings and Parameters side by side
     dbc.Row([
-        # Left column - Settings
+        # Gliders column
         dbc.Col([
             html.Div([
                 dbc.Card([
                     dbc.CardBody([
-                        html.H4("Assets:"),
+                        html.H4("Gliders:"),
                         dcc.Checklist(
                             id='glider_overlay_checklist',
                             options=[{'label': s, 'value': s} for s in glider_ids],
@@ -278,30 +311,50 @@ app.layout = dbc.Container([
                     ])
                 ])
             ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        ], width=4),
-        
-        # Right column - Parameters
+        ], width=3),
+        # Assets column
         dbc.Col([
             html.Div([
                 dbc.Card([
                     dbc.CardBody([
-                        html.H4("Parameters"),
+                        html.H4("Assets:"),
+                        dcc.Checklist(
+                            id='assets_checklist',
+                            options=[
+                                {'label': 'RV Connecticut', 'value': 'RV Connecticut'},
+                                {'label': 'LRAUV', 'value': 'LRAUV'},
+                                {'label': 'Drifter A', 'value': 'Drifter A'},
+                                {'label': 'Drifter B', 'value': 'Drifter B'},
+                                {'label': 'Drifter C', 'value': 'Drifter C'}
+                            ],
+                            value=[],
+                            labelStyle={'display': 'block'}
+                        )
+                    ])
+                ])
+            ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
+        ], width=3),
+        # Map parameters column
+        dbc.Col([
+            html.Div([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("Map Parameters"),
                         dcc.RadioItems(
                             id='Parameters',
                             options=[
                                 {'label': 'Station', 'value': 'Station'},
                                 {'label': 'pHin MLD mean', 'value': 'pHinsitu[Total]'},
                                 {'label': 'Rodamine MLD mean', 'value': 'Ro'},
-                                {'label': 'MLD [m]', 'value': 'Mld'},
+                                {'label': 'MLD [m]', 'value': 'MLD'},
                             ],
                             value='Station'
                         )
                     ])
                 ])
             ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        ], width=4),
-        
-        # Right column - Parameters
+        ], width=3),
+        # Map Options column
         dbc.Col([
             html.Div([
                 dbc.Card([
@@ -309,17 +362,19 @@ app.layout = dbc.Container([
                         html.H4("Map Options"),
                         dcc.Checklist(
                                 id='gsbounds',
-                                options=[{'label': 'Overlay Gulf Stream', 'value': 'overlay'}],
+                                options=[
+                                    {'label': 'Overlay Gulf Stream', 'value': 'overlay'},
+                                    {'label': 'Overlay Glider Grid', 'value': 'glider_grid'}
+                                    ],
                                 value=[],
                                 labelStyle={'display': 'block'}
                             )
                     ])
                 ])
             ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        ], width=4)
+        ], width=3),
     ]),
-
-   # Third Row - Plotting
+    # Third Row - Plotting
     dbc.Row([
         # First column (left side)
         dbc.Col([
@@ -335,7 +390,6 @@ app.layout = dbc.Container([
                 ]),
             ], style={'padding': '10px', 'backgroundColor': '#e3f2fd'})
         ], width=6),
-        
         # Second column (right side)
         dbc.Col([
             html.Div([
@@ -350,40 +404,149 @@ app.layout = dbc.Container([
                 ]),
             ], style={'padding': '10px', 'backgroundColor': '#e3f2fd'})
         ], width=6),
-        
+    ]),
+    # Tabs for lazy loading
+    dcc.Tabs(id='lazy-tabs', value='tab-1', children=[
+        dcc.Tab(label='Physical', value='tab-1', children=[
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(id='temp-plot', style={'height': '40vh', 'width': '100%'})
+                        ])
+                    ])
+                ], width=4),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(id='salinity-plot', style={'height': '40vh', 'width': '100%'})
+                        ])
+                    ])
+                ], width=4),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(id='chl-plot', style={'height': '40vh', 'width': '100%'})
+                        ])
+                    ])
+                ], width=4),
+            ]),
+        ]),
+        dcc.Tab(label='pH Diagnostics', value='tab-2', children=[
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(id='vrs-plot', style={'height': '40vh', 'width': '100%'})
+                        ])
+                    ])
+                ], width=4),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(id='vrs-std-plot', style={'height': '40vh', 'width': '100%'})
+                        ])
+                    ])
+                ], width=4),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(id='ik-plot', style={'height': '40vh', 'width': '100%'})
+                        ])
+                    ])
+                ], width=4),
+            ]),
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(id='vk-plot', style={'height': '40vh', 'width': '100%'})
+                        ])
+                    ])
+                ], width=4),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(id='vk-std-plot', style={'height': '40vh', 'width': '100%'})
+                        ])
+                    ])
+                ], width=4),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(id='ib-plot', style={'height': '40vh', 'width': '100%'})
+                        ])
+                    ])
+                ], width=4),
+            ]),
+        ]),
     ]),
 ], fluid=True, className='dashboard-container')
 
-# @app.callback(
-#     [Output('RangeSlider', 'min'),
-#      Output('RangeSlider', 'max'),
-#      Output('RangeSlider', 'value'),
-#      Output('RangeSlider', 'marks')],
-#       [Input('glider_overlay_checklist', 'value'),
-#       Input('interval-refresh', 'n_intervals')]
-# )
-# def update_range_slider(glider_overlay, n):
-#     df_latest = loader.load_data()
-#     unix_min, unix_max = df_latest["UnixTimestamp"].min(), df_latest["UnixTimestamp"].max() 
-#     unix_max_minus_12hrs = unix_max - 60*60*12
-#     marks = range_slider_marks(df_latest, 20)
-#     return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks
-
+# --- Combined callback for map and scatter plots ---
 @app.callback(
-    Output('map-plot','figure'),
+    [Output('map-plot', 'figure'),
+     Output('pHin-plot', 'figure'),
+     Output('doxy-plot', 'figure'),
+     Output('temp-plot', 'figure'),
+     Output('salinity-plot', 'figure'),
+     Output('chl-plot', 'figure'),
+     Output('vrs-plot', 'figure'),
+     Output('vrs-std-plot', 'figure'),
+     Output('vk-plot', 'figure'),
+     Output('vk-std-plot', 'figure'),
+     Output('ik-plot', 'figure'),
+     Output('ib-plot', 'figure')],
     [Input('interval-refresh', 'n_intervals'),
      Input('Parameters', 'value'),
-     Input('gsbounds','value'),
-     Input('glider_overlay_checklist', 'value')]
+     Input('gsbounds', 'value'),
+     Input('glider_overlay_checklist', 'value'),
+     Input('lazy-tabs', 'value'),
+     Input('RangeSlider', 'value')]
 )
-def update_map(n, selected_parameter, gs_overlay, glider_overlay):
+def update_all_figs(n, selected_parameter, gs_overlay, glider_overlay, selected_tab, range_value):
+    # Load data once
     df_latest = loader.load_data()
-    df_map = get_first_10_pH_average(df_latest)
+    # Filter by date range
+    if range_value[0] == range_value[1]:
+        df_filtered = df_latest
+    else:
+        df_filtered = df_latest[
+            (df_latest['UnixTimestamp'] >= range_value[0]) &
+            (df_latest['UnixTimestamp'] <= range_value[1])
+        ]
+    # For map plot: summary DataFrame
+    # df_map = get_first_10_pH_average(df_filtered)
+    df_map = get_MLD_avg(df_filtered)
     df_map_filter = filter_glider_assets(df_map, glider_overlay)
-    
-    cmin, cmax, cstep = get_clim(df_map, selected_parameter)
+    df_latest_filter = filter_glider_assets(df_filtered, glider_overlay)
 
-    # Create base figure
+    # Handle empty DataFrame case
+    is_map_df = isinstance(df_map_filter, pd.DataFrame)
+    is_latest_df = isinstance(df_latest_filter, pd.DataFrame)
+    if (not is_map_df or df_map_filter.empty) or (not is_latest_df or df_latest_filter.empty):
+        blank_fig = go.Figure()
+        if selected_tab == 'tab-1':
+            return (
+                blank_fig, blank_fig, blank_fig,
+                blank_fig, blank_fig, blank_fig,
+                dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            )
+        elif selected_tab == 'tab-2':
+            return (
+                blank_fig, blank_fig, blank_fig,
+                dash.no_update, dash.no_update, dash.no_update,
+                blank_fig, blank_fig, blank_fig, blank_fig, blank_fig, blank_fig
+            )
+        else:
+            return (
+                blank_fig, blank_fig, blank_fig,
+                dash.no_update, dash.no_update, dash.no_update,
+                dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            )
+
+    # Use df_map_filter for color range calculation
+    cmin, cmax, cstep = get_clim(df_map_filter, selected_parameter)
     map_fig = px.scatter_map(
         df_map_filter, lat="Lat [°N]", lon="Lon [°E]",
         map_style="satellite",
@@ -391,12 +554,9 @@ def update_map(n, selected_parameter, gs_overlay, glider_overlay):
         color=selected_parameter,
         hover_name=selected_parameter,
         range_color=[cmin, cmax],
-        # labels={"Station": "Profile"}
-        
+        labels={"Station": "Station"}
     )
-    map_fig.update_layout(legend_title='Spray203')
-    
-    # If Gulf Stream overlay is checked, add trace
+    map_fig.update_traces(marker=dict(size=10))
     if 'overlay' in gs_overlay:
         map_fig.add_trace(go.Scattermap(
             lat=GulfStreamBounds['Lat'],
@@ -406,18 +566,7 @@ def update_map(n, selected_parameter, gs_overlay, glider_overlay):
             marker=dict(size=6, color='deepskyblue'),
             line=dict(width=2, color='deepskyblue')
         ))
-    return map_fig
-
-@app.callback(
-    [Output('pHin-plot','figure'),
-     Output('doxy-plot','figure')],
-    [Input('interval-refresh', 'n_intervals'),
-     Input('glider_overlay_checklist', 'value')]
-)
-def update_scatter_plots(n, glider_overlay):
-    df_latest = loader.load_data()
-    df_latest_filter = filter_glider_assets(df_latest, glider_overlay)
-
+    # For scatter plots: full filtered DataFrame
     scatter_fig_pHin = make_depth_scatter_plot(
         df_latest_filter,
         x="pHinsitu[Total]",
@@ -428,9 +577,101 @@ def update_scatter_plots(n, glider_overlay):
         x="Oxygen[µmol/kg]",
         title="Oxygen[µmol/kg] vs. Depth"
     )
-    
-    return scatter_fig_pHin, scatter_fig_doxy
+    scatter_fig_temp = make_depth_scatter_plot(
+        df_latest_filter,
+        x="Temperature[°C]",
+        title="Temperature[°C] vs. Depth"
+    )
+    scatter_fig_salinity = make_depth_scatter_plot(
+        df_latest_filter,
+        x="Salinity[pss]",
+        title="Salinity[pss] vs. Depth"
+    )
+    scatter_fig_chl = make_depth_scatter_plot(
+        df_latest_filter,
+        x="Chl_a[mg/m^3]",
+        title="Chl_a[mg/m^3] vs. Depth"
+    )
+    scatter_fig_vrs = make_depth_scatter_plot(
+        df_latest_filter,
+        x="VRS[Volts]",
+        title="VRS[Volts] vs. Depth"
+    )
+    scatter_fig_vrs_std = make_depth_scatter_plot(
+        df_latest_filter,
+        x="VRS_STD[Volts]",
+        title="VRS_STD[Volts] vs. Depth"
+    )
+    scatter_fig_vk = make_depth_scatter_plot(
+        df_latest_filter,
+        x="VK[Volts]",
+        title="VK[Volts] vs. Depth"
+    )
+    scatter_fig_vk_std = make_depth_scatter_plot(
+        df_latest_filter,
+        x="VK_STD[Volts]",
+        title="VK_STD[Volts] vs. Depth"
+    )
+    scatter_fig_ik = make_depth_scatter_plot(
+        df_latest_filter,
+        x="IK[nA]",
+        title="IK[nA] vs. Depth"
+    )
+    scatter_fig_ib = make_depth_scatter_plot(
+        df_latest_filter,
+        x="Ib[nA]",
+        title="Ib[nA] vs. Depth"
+    )
+    # Always update map, pHin, doxy
+    # Tab 1: update temp, salinity, chla; Tab 2: update vrs, vrs_std, vk, vk_std, ik, ib
+    if selected_tab == 'tab-1':
+        return (
+            map_fig, scatter_fig_pHin, scatter_fig_doxy,
+            scatter_fig_temp, scatter_fig_salinity, scatter_fig_chl,
+            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        )
+    elif selected_tab == 'tab-2':
+        return (
+            map_fig, scatter_fig_pHin, scatter_fig_doxy,
+            dash.no_update, dash.no_update, dash.no_update,
+            scatter_fig_vrs, scatter_fig_vrs_std, scatter_fig_vk, scatter_fig_vk_std, scatter_fig_ik, scatter_fig_ib
+        )
+    else:
+        return (
+            map_fig, scatter_fig_pHin, scatter_fig_doxy,
+            dash.no_update, dash.no_update, dash.no_update,
+            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        )
+
+@app.callback(
+    [
+        Output('RangeSlider', 'min'),
+        Output('RangeSlider', 'max'),
+        Output('RangeSlider', 'value'),
+        Output('RangeSlider', 'marks'),
+    ],
+    [
+        Input('glider_overlay_checklist', 'value'),
+        Input('assets_checklist', 'value'),  # <-- Add this
+        Input('interval-refresh', 'n_intervals'),
+    ]
+)
+def update_range_slider(glider_overlay, assets_selected, n):
+    df_latest = loader.load_data()
+    # Optionally filter by glider
+    df_latest = filter_glider_assets(df_latest, glider_overlay)
+    # Optionally filter by assets (implement this function if needed)
+    # df_latest = filter_assets(df_latest, assets_selected)
+    if df_latest.empty:
+        # Return safe defaults if no data
+        return 0, 1, [0, 1], {0: "No data"}
+    unix_min = df_latest["UnixTimestamp"].min()
+    unix_max = df_latest["UnixTimestamp"].max()
+    unix_max_minus_12hrs = unix_max - 60*60*12
+    marks = range_slider_marks(df_latest, 20)
+    return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks
+
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=str(port), debug=True)
