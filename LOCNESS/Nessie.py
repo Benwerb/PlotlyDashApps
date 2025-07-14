@@ -261,10 +261,18 @@ unix_max_minus_12hrs = unix_max - 60*60*12
 marks = range_slider_marks(df_latest, 20)
 
 app.layout = dbc.Container([
-    # Top row - Map
+    # Top row - Header
     dbc.Row([
-        html.H2('NESSIE', className='text-info text-start',
-                style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}),
+        dbc.Col([
+            html.H2('NESSIE', className='text-info text-start',
+                    style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '10px'}),
+            html.P(f'Last Updated: {df_latest["Datetime"].max().strftime("%Y-%m-%d %H:%M:%S")} UTC', 
+                   className='text-muted text-start',
+                   style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'})
+        ], width=12)
+    ]),
+    # Map row
+    dbc.Row([
         dbc.Col([
             html.Div([
                 # Map plot
