@@ -9,7 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 from io import StringIO
 import re
-from data_loader import GliderDataLoader, GulfStreamLoader
+from data_loader import GliderDataLoader, GulfStreamLoader, ShipDataLoader
 import datetime as dt
 from typing import cast, List, Dict, Any
 
@@ -196,6 +196,14 @@ def make_depth_scatter_plot(
 
     return fig
 
+def combine_dataframes_for_range_slider(df_latest, df_ship):
+    cols = ["UnixTimestamp", "Datetime"]
+    combined = pd.concat([
+        df_latest[cols],
+        df_ship[cols]
+    ], ignore_index=True).dropna(subset=cols)
+    return combined
+
 def range_slider_marks(df, target_mark_count=10):
     """
     Generate RangeSlider marks at evenly spaced full-hour intervals,
@@ -243,7 +251,6 @@ def range_slider_marks(df, target_mark_count=10):
 gs = GulfStreamLoader()
 GulfStreamBounds = gs.load_data()
 glider_ids = ['SN203', 'SN209', 'SN070', 'SN0075']
-# glider_ids = ['203', '209', '070', '075']
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = cast(List[str | Dict[str, Any]], [dbc.themes.FLATLY])
@@ -254,6 +261,8 @@ server = app.server # Required for Gunicorn
 loader = GliderDataLoader(filenames=['25420901RT.txt', '25520301RT.txt'])
 # Load the most recent file (automatically done if no filename provided)
 df_latest = loader.load_data()
+ship_loader = ShipDataLoader()
+df_ship = ship_loader.load_data()
 station_min, station_max = df_latest["Station"].min(), df_latest["Station"].max()
 date_min, date_max = df_latest["Date"].min(), df_latest["Date"].max() 
 unix_min, unix_max = df_latest["UnixTimestamp"].min(), df_latest["UnixTimestamp"].max() 
@@ -510,18 +519,25 @@ app.layout = dbc.Container([
      Input('gsbounds', 'value'),
      Input('glider_overlay_checklist', 'value'),
      Input('lazy-tabs', 'value'),
-     Input('RangeSlider', 'value')]
+     Input('RangeSlider', 'value'),
+     Input('assets_checklist', 'value')]
 )
-def update_all_figs(n, selected_parameter, gs_overlay, glider_overlay, selected_tab, range_value):
+def update_all_figs(n, selected_parameter, gs_overlay, glider_overlay, selected_tab, range_value, assets_checklist):
     # Load data once
     df_latest = loader.load_data()
+    df_ship = ship_loader.load_data()
     # Filter by date range
     if range_value[0] == range_value[1]:
         df_filtered = df_latest
+        df_ship_filtered = df_ship
     else:
         df_filtered = df_latest[
             (df_latest['UnixTimestamp'] >= range_value[0]) &
             (df_latest['UnixTimestamp'] <= range_value[1])
+        ]
+        df_ship_filtered = df_ship[
+            (df_ship['UnixTimestamp'] >= range_value[0]) &
+            (df_ship['UnixTimestamp'] <= range_value[1])
         ]
     # For map plot: summary DataFrame
     # df_map = get_first_10_pH_average(df_filtered)
@@ -573,6 +589,16 @@ def update_all_figs(n, selected_parameter, gs_overlay, glider_overlay, selected_
             name='Gulf Stream',
             marker=dict(size=6, color='deepskyblue'),
             line=dict(width=2, color='deepskyblue')
+        ))
+    if 'RV Connecticut' in assets_checklist:
+        map_fig.add_trace(go.Scattermap(
+            lat=df_ship['lat'],
+            lon=df_ship['lon'],
+            mode='markers',
+            name='RV Connecticut',
+            marker=dict(size=6, color=df_ship['ph_ma'],colorscale='bluered',cmin=8,cmax=8.1),
+            hovertext=df_ship['ph_ma'],
+            hoverinfo='text'
         ))
     # For scatter plots: full filtered DataFrame
     scatter_fig_pHin = make_depth_scatter_plot(
@@ -660,10 +686,29 @@ def update_all_figs(n, selected_parameter, gs_overlay, glider_overlay, selected_
     ],
     [
         Input('glider_overlay_checklist', 'value'),
-        Input('assets_checklist', 'value'),  # <-- Add this
+        Input('assets_checklist', 'value'),
         Input('interval-refresh', 'n_intervals'),
     ]
 )
+# def update_range_slider(glider_overlay, assets_selected, n):
+#     df_latest = loader.load_data()
+#     df_latest = filter_glider_assets(df_latest, glider_overlay)
+#     if "RV Connecticut" in assets_selected:
+#         df_ship = ship_loader.load_data()
+#     # Optionally filter by glider
+    
+#     # Optionally filter by assets (implement this function if needed)
+#     # df_latest = filter_assets(df_latest, assets_selected)
+#     combined = combine_dataframes_for_range_slider(df_latest, df_ship)
+#     if combined.empty:
+#         # Return safe defaults if no data
+#         return 0, 1, [0, 1], {0: "No data"}
+#     else:
+#         unix_min = combined["UnixTimestamp"].min()
+#         unix_max = combined["UnixTimestamp"].max()
+#         unix_max_minus_12hrs = unix_max - 60*60*12
+#         marks = range_slider_marks(combined, 20)
+#     return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks
 def update_range_slider(glider_overlay, assets_selected, n):
     df_latest = loader.load_data()
     # Optionally filter by glider
