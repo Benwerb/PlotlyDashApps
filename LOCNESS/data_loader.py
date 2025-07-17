@@ -70,7 +70,7 @@ class GliderDataLoader:
                 errors='coerce'
             )
             # Add Unix timestamp (seconds since epoch)
-            df['UnixTimestamp'] = df['Datetime'].astype('int64') // 10**9
+            df['unixTimestamp'] = df['Datetime'].astype('int64') // 10**9
             if 'PHIN_CANYONB[Total]' in df.columns and 'pHinsitu[Total]' in df.columns:
                 df['pHin_Canb_Delta'] = df['pHinsitu[Total]'] - df['PHIN_CANYONB[Total]']
             else:
@@ -118,7 +118,7 @@ class GulfStreamLoader:
             'Lon': longitudes
         })
         return gulfstreamcoords
-class ShipDataLoader:
+class MapDataLoader:
     def __init__(self, filenames=None):
         """
         Initialize DataLoader. Always fetches available sensor-data.txt files.
@@ -146,7 +146,7 @@ class ShipDataLoader:
         files = [
             os.path.basename(str(a['href']))
             for a in soup.find_all('a', href=True)
-            if isinstance(a, Tag) and 'sensor-data' in str(a['href'])
+            if isinstance(a, Tag) and 'LochNessMapProduct' in str(a['href'])
         ]
         return sorted(files)
 
@@ -168,13 +168,14 @@ class ShipDataLoader:
         file_url = self.folder_url + self.file_list[0]
         file_response = requests.get(file_url)
         file_content = StringIO(file_response.text)
-        df = pd.read_csv(file_content, delimiter=",")
+        df = pd.read_csv(file_content, delimiter=",", dtype={'Cruise': 'category', 'Platform': 'category', 'Layer': 'category'})
 
         # Clean
         df.columns = df.columns.str.replace('Â', '', regex=False)
         df.replace([-1e10, -999], pd.NA, inplace=True)
-        df['Datetime'] = pd.to_datetime(df['Time'], format='%Y-%m-%d %H:%M:%S', errors='coerce')
-        # Add Unix timestamp (seconds since epoch)
-        df['UnixTimestamp'] = df['Datetime'].astype('int64') // 10**9
-
+        df['Datetime'] = pd.to_datetime(df['unixTimestamp'], unit='s', errors='coerce')
+        
+        # Remove rows where lat or lon are missing
+        df = df.dropna(subset=['lat', 'lon'])
+        
         return df

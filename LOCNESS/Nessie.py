@@ -9,7 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 from io import StringIO
 import re
-from data_loader import GliderDataLoader, GulfStreamLoader, ShipDataLoader
+from data_loader import GliderDataLoader, GulfStreamLoader, MapDataLoader
 import datetime as dt
 from typing import cast, List, Dict, Any
 
@@ -196,11 +196,11 @@ def make_depth_scatter_plot(
 
     return fig
 
-def combine_dataframes_for_range_slider(df_latest, df_ship):
-    cols = ["UnixTimestamp", "Datetime"]
+def combine_dataframes_for_range_slider(df_latest, df_map):
+    cols = ["unixTimestamp", "Datetime"]
     combined = pd.concat([
         df_latest[cols],
-        df_ship[cols]
+        df_map[cols]
     ], ignore_index=True).dropna(subset=cols)
     return combined
 
@@ -212,14 +212,14 @@ def range_slider_marks(df, target_mark_count=10):
     Parameters:
     ----------
     df : pandas.DataFrame
-        Must contain 'Datetime' and 'UnixTimestamp' columns.
+        Must contain 'Datetime' and 'unixTimestamp' columns.
     target_mark_count : int
         Approximate number of marks to generate.
 
     Returns:
     -------
     dict
-        Dictionary of {UnixTimestamp: formatted datetime string}
+        Dictionary of {unixTimestamp: formatted datetime string}
     """
     # Sort and get min/max
     df = df.sort_values("Datetime")
@@ -261,11 +261,11 @@ server = app.server # Required for Gunicorn
 loader = GliderDataLoader(filenames=['25420901RT.txt', '25520301RT.txt'])
 # Load the most recent file (automatically done if no filename provided)
 df_latest = loader.load_data()
-ship_loader = ShipDataLoader()
-df_ship = ship_loader.load_data()
+map_loader = MapDataLoader()
+df_map = map_loader.load_data()
 station_min, station_max = df_latest["Station"].min(), df_latest["Station"].max()
 date_min, date_max = df_latest["Date"].min(), df_latest["Date"].max() 
-unix_min, unix_max = df_latest["UnixTimestamp"].min(), df_latest["UnixTimestamp"].max() 
+unix_min, unix_max = df_latest["unixTimestamp"].min(), df_latest["unixTimestamp"].max() 
 unix_max_minus_12hrs = unix_max - 60*60*12
 marks = range_slider_marks(df_latest, 20)
 
@@ -360,12 +360,12 @@ app.layout = dbc.Container([
                         dcc.RadioItems(
                             id='Parameters',
                             options=[
-                                {'label': 'Station', 'value': 'Station'},
-                                {'label': 'pHin MLD mean', 'value': 'pHinsitu[Total]'},
+                                {'label': 'unixTimestamp', 'value': 'unixTimestamp'},
+                                {'label': 'pHin MLD mean', 'value': 'pHin'},
                                 {'label': 'Rodamine MLD mean', 'value': 'Ro'},
                                 {'label': 'MLD [m]', 'value': 'MLD'},
                             ],
-                            value='Station'
+                            value='unixTimestamp'
                         )
                     ])
                 ])
@@ -525,30 +525,35 @@ app.layout = dbc.Container([
 def update_all_figs(n, selected_parameter, gs_overlay, glider_overlay, selected_tab, range_value, assets_checklist):
     # Load data once
     df_latest = loader.load_data()
-    df_ship = ship_loader.load_data()
+    df_map = map_loader.load_data()
     # Filter by date range
     if range_value[0] == range_value[1]:
         df_filtered = df_latest
-        df_ship_filtered = df_ship
+        df_map_filtered = df_map
     else:
         df_filtered = df_latest[
-            (df_latest['UnixTimestamp'] >= range_value[0]) &
-            (df_latest['UnixTimestamp'] <= range_value[1])
+            (df_latest['unixTimestamp'] >= range_value[0]) &
+            (df_latest['unixTimestamp'] <= range_value[1])
         ]
-        df_ship_filtered = df_ship[
-            (df_ship['UnixTimestamp'] >= range_value[0]) &
-            (df_ship['UnixTimestamp'] <= range_value[1])
+        df_map_filtered = df_map[
+            (df_map['unixTimestamp'] >= range_value[0]) &
+            (df_map['unixTimestamp'] <= range_value[1])
         ]
+    df_ship = df_map_filtered[df_map_filtered['Cruise'] == "RV Connecticut"]
+    df_SN203 = df_map_filtered[df_map_filtered['Cruise'] == "25520301"]
+    df_SN209 = df_map_filtered[df_map_filtered['Cruise'] == "25420901"]
+    # df_SN070 = df_map_filtered[df_map_filtered['Cruise'] == "SN070"]
+    # df_SN0075 = df_map_filtered[df_map_filtered['Cruise'] == "SN0075"]
     # For map plot: summary DataFrame
     # df_map = get_first_10_pH_average(df_filtered)
-    df_map = get_MLD_avg(df_filtered)
-    df_map_filter = filter_glider_assets(df_map, glider_overlay)
+    # df_map = get_MLD_avg(df_filtered)
+    # df_map_filter = filter_glider_assets(df_map, glider_overlay)
     df_latest_filter = filter_glider_assets(df_filtered, glider_overlay)
 
     # Handle empty DataFrame case
-    is_map_df = isinstance(df_map_filter, pd.DataFrame)
+    is_map_df = isinstance(df_map_filtered, pd.DataFrame)
     is_latest_df = isinstance(df_latest_filter, pd.DataFrame)
-    if (not is_map_df or df_map_filter.empty) or (not is_latest_df or df_latest_filter.empty):
+    if (not is_map_df or df_map_filtered.empty) or (not is_latest_df or df_latest_filter.empty):
         blank_fig = go.Figure()
         if selected_tab == 'tab-1':
             return (
@@ -569,37 +574,81 @@ def update_all_figs(n, selected_parameter, gs_overlay, glider_overlay, selected_
                 dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
             )
 
-    # Use df_map_filter for color range calculation
-    cmin, cmax, cstep = get_clim(df_map_filter, selected_parameter)
-    map_fig = px.scatter_map(
-        df_map_filter, lat="Lat [°N]", lon="Lon [°E]",
-        map_style="satellite",
-        zoom=8,
-        color=selected_parameter,
-        hover_name=selected_parameter,
-        range_color=[cmin, cmax],
-        labels={"Station": "Station"}
-    )
-    map_fig.update_traces(marker=dict(size=10))
-    if 'overlay' in gs_overlay:
-        map_fig.add_trace(go.Scattermap(
-            lat=GulfStreamBounds['Lat'],
-            lon=GulfStreamBounds['Lon'],
-            mode='lines',
-            name='Gulf Stream',
-            marker=dict(size=6, color='deepskyblue'),
-            line=dict(width=2, color='deepskyblue')
-        ))
-    if 'RV Connecticut' in assets_checklist:
-        map_fig.add_trace(go.Scattermap(
+    map_fig = go.Figure()
+    map_fig.add_trace(go.Scattermap(
             lat=df_ship['lat'],
             lon=df_ship['lon'],
             mode='markers',
             name='RV Connecticut',
-            marker=dict(size=6, color=df_ship['ph_ma'],colorscale='bluered',cmin=8,cmax=8.1),
-            hovertext=df_ship['ph_ma'],
-            hoverinfo='text'
+            marker=dict(
+                size=6, 
+                color=df_ship[selected_parameter],
+                colorscale='Viridis',
+                showscale=True,
+                colorbar=dict(len=0.8),
+            ),
         ))
+    map_fig.add_trace(go.Scattermap(
+        lat=df_SN203['lat'],
+        lon=df_SN203['lon'],
+        mode='markers',
+        name='SN203',
+        marker=dict(
+            size=6, 
+            color=df_SN203[selected_parameter],
+            colorscale='Viridis',
+            showscale=False,
+        ),
+    ))
+    map_fig.add_trace(go.Scattermap(
+    lat=df_SN209['lat'],
+    lon=df_SN209['lon'],
+    mode='markers',
+    name='SN209',
+    marker=dict(
+        size=6, 
+        color=df_SN209[selected_parameter],
+        colorscale='Viridis',
+        showscale=False,
+    ),
+    ))
+    # map_fig.add_trace(go.Scattermap(
+    # lat=GulfStreamBounds['Lat'],
+    # lon=GulfStreamBounds['Lon'],
+    # mode='lines',
+    # name='Gulf Stream',
+    # marker=dict(size=6, color='deepskyblue'),
+    # line=dict(width=2, color='deepskyblue'),
+    # ))
+    # Use px.scatter_map with color parameter for automatic trace separation
+    # map_fig = px.scatter_map(
+    #     df_map_filtered, lat="lat", lon="lon",
+    #     map_style="satellite",
+    #     zoom=8,
+    #     color="Platform",  # This automatically creates separate traces for each cruise
+    #     hover_name="Cruise",
+    #     labels={"Cruise": "Cruise"}
+    # )
+    # map_fig.update_traces(marker=dict(size=10))
+    # if 'overlay' in gs_overlay:
+    #     map_fig.add_trace(go.Scattermap(
+    #         lat=GulfStreamBounds['Lat'],
+    #         lon=GulfStreamBounds['Lon'],
+    #         mode='lines',
+    #         name='Gulf Stream',
+    #         marker=dict(size=6, color='deepskyblue'),
+    #         line=dict(width=2, color='deepskyblue')
+    #     ))
+    # if 'RV Connecticut' in assets_checklist:
+    #     map_fig.add_trace(go.Scattermap(
+    #         lat=df_map['lat'],
+    #         lon=df_map['lon'],
+    #         mode='markers',
+    #         name='RV Connecticut',
+    #         marker=dict(size=6, color=df_map['ph_ma'],colorscale='bluered',cmin=8,cmax=8.1),
+    #         hovertext=df_map['ph_ma'],
+    #         hoverinfo='text'
+    #     ))
     # For scatter plots: full filtered DataFrame
     scatter_fig_pHin = make_depth_scatter_plot(
         df_latest_filter,
@@ -694,35 +743,36 @@ def update_all_figs(n, selected_parameter, gs_overlay, glider_overlay, selected_
 #     df_latest = loader.load_data()
 #     df_latest = filter_glider_assets(df_latest, glider_overlay)
 #     if "RV Connecticut" in assets_selected:
-#         df_ship = ship_loader.load_data()
+#         df_map = ship_loader.load_data()
 #     # Optionally filter by glider
     
 #     # Optionally filter by assets (implement this function if needed)
 #     # df_latest = filter_assets(df_latest, assets_selected)
-#     combined = combine_dataframes_for_range_slider(df_latest, df_ship)
+#     combined = combine_dataframes_for_range_slider(df_latest, df_map)
 #     if combined.empty:
 #         # Return safe defaults if no data
 #         return 0, 1, [0, 1], {0: "No data"}
 #     else:
-#         unix_min = combined["UnixTimestamp"].min()
-#         unix_max = combined["UnixTimestamp"].max()
+#         unix_min = combined["unixTimestamp"].min()
+#         unix_max = combined["unixTimestamp"].max()
 #         unix_max_minus_12hrs = unix_max - 60*60*12
 #         marks = range_slider_marks(combined, 20)
 #     return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks
 def update_range_slider(glider_overlay, assets_selected, n):
-    df_latest = loader.load_data()
-    # Optionally filter by glider
-    df_latest = filter_glider_assets(df_latest, glider_overlay)
-    # Optionally filter by assets (implement this function if needed)
-    # df_latest = filter_assets(df_latest, assets_selected)
-    if df_latest.empty:
+    df_map = map_loader.load_data()
+    # df_latest = loader.load_data()
+    # # Optionally filter by glider
+    # df_latest = filter_glider_assets(df_latest, glider_overlay)
+    # # Optionally filter by assets (implement this function if needed)
+    # # df_latest = filter_assets(df_latest, assets_selected)
+    if df_map.empty:
         # Return safe defaults if no data
         return 0, 1, [0, 1], {0: "No data"}
-    unix_min = df_latest["UnixTimestamp"].min()
-    unix_max = df_latest["UnixTimestamp"].max()
+    unix_min = df_map["unixTimestamp"].min()
+    unix_max = df_map["unixTimestamp"].max()
     unix_max_minus_12hrs = unix_max - 60*60*12
-    marks = range_slider_marks(df_latest, 20)
-    return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks
+    marks = range_slider_marks(df_map, 20)
+    return unix_min, unix_max, [unix_min, unix_max], marks
 
 
 if __name__ == '__main__':
