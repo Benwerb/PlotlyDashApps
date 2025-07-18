@@ -9,7 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 from io import StringIO
 import re
-from data_loader import GliderDataLoader, GulfStreamLoader, MapDataLoader, GliderGridDataLoader
+from data_loader import GliderDataLoader, GulfStreamLoader, MapDataLoader, GliderGridDataLoader, MPADataLoader
 import datetime as dt
 from typing import cast, List, Dict, Any
 
@@ -393,7 +393,8 @@ app.layout = dbc.Container([
                                 id='map_options',
                                 options=[
                                     {'label': 'Overlay Gulf Stream', 'value': 'overlay'},
-                                    {'label': 'Overlay Glider Grid', 'value': 'glider_grid'}
+                                    {'label': 'Overlay Glider Grid', 'value': 'glider_grid'},
+                                    {'label': 'Overlay Stellwagen Bank MPA', 'value': 'mpa'}
                                     ],
                                 value=[],
                                 labelStyle={'display': 'block'}
@@ -543,6 +544,9 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     # load glider grid
     glider_grid_loader = GliderGridDataLoader()
     df_glider_grid = glider_grid_loader.load_data()
+    # load mpa data
+    mpa_loader = MPADataLoader()
+    df_mpa = mpa_loader.load_data()
     # Filter by date range
     if range_value[0] == range_value[1]:
         df_latest_filter = df_latest
@@ -669,6 +673,16 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             marker=dict(size=6, color='red'),
             text = df_glider_grid['Grid_ID'],
             textposition = "bottom right",
+        ))
+
+    if 'mpa' in map_options:
+        map_fig.add_trace(go.Scattermap(
+            lat=df_mpa['Lat'],
+            lon=df_mpa['Lon'],
+            mode='lines',
+            name='Stellwagen Bank MPA',
+            # marker=dict(size=8, color='green'),
+            line=dict(width=4, color='green'),
         ))
 
     map_fig.update_layout(map = {'zoom': 8, 'style': 'satellite', 'center': {'lat': mapcenterlat, 'lon': mapcenterlon}})
