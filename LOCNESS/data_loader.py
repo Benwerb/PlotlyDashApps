@@ -146,7 +146,7 @@ class MapDataLoader:
         files = [
             os.path.basename(str(a['href']))
             for a in soup.find_all('a', href=True)
-            if isinstance(a, Tag) and 'LochNessMapProduct' in str(a['href'])
+            if isinstance(a, Tag) and 'LocNessMapProduct' in str(a['href'])
         ]
         return sorted(files)
 
