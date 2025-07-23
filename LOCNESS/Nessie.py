@@ -320,7 +320,7 @@ app.layout = dbc.Container([
                     ])
                 ])
             ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        ], width=3),
+        ], width=2),
         # Assets column
         # dbc.Col([
         #     html.Div([
@@ -364,7 +364,7 @@ app.layout = dbc.Container([
                     ])
                 ])
             ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        ], width=3),
+        ], width=2),
         # Map parameters column
         dbc.Col([
             html.Div([
@@ -374,15 +374,34 @@ app.layout = dbc.Container([
                         dcc.RadioItems(
                             id='Layers',
                             options=[
-                                {'label': 'Surface', 'value': 'Surface'},
-                                {'label': 'Mixed Layer Depth Avg', 'value': 'MLD'}
+                                {'label': 'Mixed Layer Depth Avg', 'value': 'MLD'},
+                                {'label': 'Surface', 'value': 'Surface'}
                             ],
-                            value='Surface'
+                            value='MLD'
                         )
                     ])
                 ])
             ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        ], width=3),
+        ], width=2),
+        # Cast Direction column
+        dbc.Col([
+            html.Div([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H4("Cast Direction"),
+                        dcc.RadioItems(
+                            id='CastDirection',
+                            options=[
+                                {'label': 'Mean', 'value': 'Mean'},
+                                {'label': 'Upcast', 'value': 'Up'},
+                                {'label': 'Downcast', 'value': 'Down'},
+                            ],
+                            value='Mean'
+                        )
+                    ])
+                ])
+            ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
+        ], width=2),
         # Map Options column
         dbc.Col([
             html.Div([
@@ -402,7 +421,7 @@ app.layout = dbc.Container([
                     ])
                 ])
             ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        ], width=3),
+        ], width=2),
     ]),
     # Third Row - Plotting
     dbc.Row([
@@ -533,9 +552,10 @@ app.layout = dbc.Container([
      Input('glider_overlay_checklist', 'value'),
      Input('lazy-tabs', 'value'),
      Input('RangeSlider', 'value'),
-     Input('Layers', 'value')]
+     Input('Layers', 'value'),
+     Input('CastDirection', 'value')]
 )
-def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected_tab, range_value, selected_layer):
+def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected_tab, range_value, selected_layer, selected_cast_direction):
     # Load glider and filter by selected gliders
     df_latest = loader.load_data()
     df_latest = filter_glider_assets(df_latest, glider_overlay)
@@ -565,6 +585,13 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         df_map_filtered = df_map_filtered[df_map_filtered['Layer'] == 'MLD']
     elif selected_layer == 'Surface':
         df_map_filtered = df_map_filtered[df_map_filtered['Layer'] == 'Surface']
+    # Filter by cast direction
+    if selected_cast_direction == 'Mean':
+        df_map_filtered = df_map_filtered[df_map_filtered['CastDirection'] == 'Mean']
+    elif selected_cast_direction == 'Up':
+        df_map_filtered = df_map_filtered[df_map_filtered['CastDirection'] == 'Up']
+    elif selected_cast_direction == 'Down':
+        df_map_filtered = df_map_filtered[df_map_filtered['CastDirection'] == 'Down']
     # Dataframes for map plot
     df_ship = df_map_filtered[df_map_filtered['Cruise'] == "RV Connecticut"]
     df_SN203 = df_map_filtered[df_map_filtered['Cruise'] == "25520301"]
@@ -582,11 +609,11 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         )
     # Set map center
     if len(df_ship) > 0:
-        mapcenterlat = np.array(df_ship['lat'])[-1]
-        mapcenterlon = np.array(df_ship['lon'])[-1]
+        last_ship_lat = np.array(df_ship['lat'])[-1]
+        last_ship_lon = np.array(df_ship['lon'])[-1]
     else:
-        mapcenterlat = np.array(df_map_filtered['lat'])[-1]
-        mapcenterlon = np.array(df_map_filtered['lon'])[-1]
+        last_ship_lat = np.array(df_map_filtered['lat'])[-1]
+        last_ship_lon = np.array(df_map_filtered['lon'])[-1]
 
     map_fig = go.Figure()
     # Set hard color limits for pHin and rhodamine
@@ -594,18 +621,34 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         cmin, cmax = 8, 8.2
         cscale = 'bluered'
     elif selected_parameter == 'pHin' and selected_layer == 'MLD':
-        cmin, cmax = 7.8, 8.0
+        cmin, cmax = 8, 8.2
         cscale = 'bluered'
-    elif selected_parameter == 'rhodamine' and selected_layer == 'Surface':
+    elif selected_parameter == 'rhodamine':
         cmin, cmax = 0, 2
-        cscale = 'bluered'
-    elif selected_parameter == 'rhodamine' and selected_layer == 'MLD':
-        cmin, cmax = 0, 2
-        cscale = 'bluered'
+        cscale = 'jet'
     else:
         cmin, cmax = None, None
         cscale = 'Viridis'
-    
+    # Only do this if coloring by unixTimestamp
+    if selected_parameter == 'unixTimestamp' and len(df_ship) > 0:
+        # Get unique unixTimestamps and corresponding datetimes
+        unix_vals = df_ship['unixTimestamp'].values
+        datetimes = df_ship['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S').values
+
+        # Choose 10 evenly spaced indices
+        n_ticks = 10
+        if len(unix_vals) > n_ticks:
+            idxs = np.linspace(0, len(unix_vals) - 1, n_ticks, dtype=int)
+            tickvals = unix_vals[idxs]
+            ticktext = datetimes[idxs]
+        else:
+            tickvals = unix_vals
+            ticktext = datetimes
+    else:
+        tickvals = None
+        ticktext = None
+
+   
     map_fig.add_trace(go.Scattermap(
             lat=df_ship['lat'],
             lon=df_ship['lon'],
@@ -613,15 +656,27 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             name='RV Connecticut',
             hovertext=df_ship[selected_parameter],
             marker=dict(
-                size=10,
+                size=6,
                 color=df_ship[selected_parameter],
                 colorscale=cscale,
-                showscale=False,
-                colorbar=dict(len=0.8),
+                showscale=True,
+                colorbar=dict(len=0.6,tickvals=tickvals,ticktext=ticktext),
                 cmin=cmin,
                 cmax=cmax,
             ),
         ))
+    map_fig.add_trace(go.Scattermap(
+        lat=[last_ship_lat],
+        lon=[last_ship_lon],
+        mode='markers',
+        name='RV Connecticut Last Location',
+        marker=dict(
+            size=20,
+            symbol='ferry',
+            showscale=False,
+        ),
+        showlegend=False
+    ))
     map_fig.add_trace(go.Scattermap(
         lat=df_SN203['lat'],
         lon=df_SN203['lon'],
@@ -629,11 +684,11 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         name='SN203',
         hovertext=df_SN203[selected_parameter],
         marker=dict(
-            size=10, 
+            size=6, 
             color=df_SN203[selected_parameter],
-            colorscale=cscale,
-            showscale=True,
-            colorbar=dict(len=0.8),
+            colorscale=cscale,  
+            showscale=False,
+            colorbar=dict(len=0.6),
             cmin=cmin,
             cmax=cmax,
         ),
@@ -645,7 +700,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     name='SN209',
     hovertext=df_SN209[selected_parameter],
     marker=dict(
-        size=10, 
+        size=6, 
         color=df_SN209[selected_parameter],
         colorscale=cscale,
         showscale=False,
@@ -679,13 +734,15 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         map_fig.add_trace(go.Scattermap(
             lat=df_mpa['Lat'],
             lon=df_mpa['Lon'],
-            mode='lines',
+            mode='lines+markers',
             name='Stellwagen Bank MPA',
             # marker=dict(size=8, color='green'),
             line=dict(width=4, color='green'),
+            text = 'Stellwagen Bank MPA',
+            textposition = "bottom right",
         ))
 
-    map_fig.update_layout(map = {'zoom': 8, 'style': 'satellite', 'center': {'lat': mapcenterlat, 'lon': mapcenterlon}})
+    map_fig.update_layout(map = {'zoom': 8, 'style': 'satellite', 'center': {'lat': last_ship_lat, 'lon': last_ship_lon}})
 
     # For scatter plots: full filtered DataFrame
     if len(df_latest_filter) == 0:

@@ -130,7 +130,7 @@ class MapDataLoader:
         self.available_files = self._get_available_files()
 
         if not self.available_files:
-            raise FileNotFoundError("No RT.txt files found at the specified URL.")
+            raise FileNotFoundError("No LocNessMapProduct files found at the specified URL.")
 
         if filenames is None:
             self.file_list = [self.available_files[-1]]  # default to most recent
@@ -146,7 +146,7 @@ class MapDataLoader:
         files = [
             os.path.basename(str(a['href']))
             for a in soup.find_all('a', href=True)
-            if isinstance(a, Tag) and 'LocNessMapProduct' in str(a['href'])
+            if isinstance(a, Tag) and 'LocnessMapProduct.txt' in str(a['href'])
         ]
         return sorted(files)
 
@@ -168,7 +168,7 @@ class MapDataLoader:
         file_url = self.folder_url + self.file_list[0]
         file_response = requests.get(file_url)
         file_content = StringIO(file_response.text)
-        df = pd.read_csv(file_content, delimiter=",", dtype={'Cruise': 'category', 'Platform': 'category', 'Layer': 'category'})
+        df = pd.read_csv(file_content, delimiter=",", dtype={'Cruise': 'category', 'Platform': 'category', 'Layer': 'category', 'CastDirection': 'category'})
 
         # Clean
         df.columns = df.columns.str.replace('Â', '', regex=False)
