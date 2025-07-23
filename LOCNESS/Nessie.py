@@ -615,6 +615,20 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         last_ship_lat = np.array(df_map_filtered['lat'])[-1]
         last_ship_lon = np.array(df_map_filtered['lon'])[-1]
 
+    # Last Glider Location SN203
+    if len(df_SN203) > 0:
+        last_glider_lat_SN203 = np.array(df_SN203['lat'])[-1]
+        last_glider_lon_SN203 = np.array(df_SN203['lon'])[-1]
+    else:
+        last_glider_lat_SN203 = []
+        last_glider_lon_SN203 = []
+    # Last Glider Location SN209
+    if len(df_SN209) > 0:
+        last_glider_lat_SN209 = np.array(df_SN209['lat'])[-1]
+        last_glider_lon_SN209 = np.array(df_SN209['lon'])[-1]
+    else:
+        last_glider_lat_SN209 = []
+        last_glider_lon_SN209 = []
     map_fig = go.Figure()
     # Set hard color limits for pHin and rhodamine
     if selected_parameter == 'pHin' and selected_layer == 'Surface':
@@ -694,6 +708,18 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         ),
     ))
     map_fig.add_trace(go.Scattermap(
+        lat=[last_glider_lat_SN203],
+        lon=[last_glider_lon_SN203],
+        mode='markers',
+        name='SN203 Last Location',
+        marker=dict(
+            size=20,
+            symbol='airport',
+            showscale=False,
+        ),
+        showlegend=False
+    ))
+    map_fig.add_trace(go.Scattermap(
     lat=df_SN209['lat'],
     lon=df_SN209['lon'],
     mode='markers',
@@ -708,7 +734,18 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         cmax=cmax,
     ),
     ))
-    
+    map_fig.add_trace(go.Scattermap(
+        lat=[last_glider_lat_SN209],
+        lon=[last_glider_lon_SN209],
+        mode='markers',
+        name='SN209 Last Location',
+        marker=dict(
+            size=20,
+            symbol='airport',
+            showscale=False,
+        ),
+        showlegend=False
+    ))
     if 'overlay' in map_options:
         map_fig.add_trace(go.Scattermap(
         lat=GulfStreamBounds['Lat'],
@@ -725,7 +762,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             lon=df_glider_grid['Lon'],
             mode='markers',
             name='Glider Grid',
-            marker=dict(size=6, color='red'),
+            marker=dict(size=6, color='black', opacity=0.5),
             text = df_glider_grid['Grid_ID'],
             textposition = "bottom right",
         ))
@@ -734,15 +771,34 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         map_fig.add_trace(go.Scattermap(
             lat=df_mpa['Lat'],
             lon=df_mpa['Lon'],
-            mode='lines+markers',
+            mode='lines',
             name='Stellwagen Bank MPA',
-            # marker=dict(size=8, color='green'),
-            line=dict(width=4, color='green'),
+            line=dict(width=4, color='red'),
             text = 'Stellwagen Bank MPA',
             textposition = "bottom right",
         ))
 
-    map_fig.update_layout(map = {'zoom': 8, 'style': 'satellite', 'center': {'lat': last_ship_lat, 'lon': last_ship_lon}})
+    # map_fig.update_layout(map = {'zoom': 8, 'style': 'satellite', 'center': {'lat': last_ship_lat, 'lon': last_ship_lon}})
+    map_fig.update_layout(
+        map_style="white-bg",
+        map_layers=[
+            {
+                "below": 'traces',
+                "sourcetype": "raster",
+                "sourceattribution": "Esri, Garmin, GEBCO, NOAA NGDC, and other contributors",
+                "source": [
+                    "https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}"
+                ]
+            },
+        ],
+    )   
+    map_fig.update_layout(
+        map=dict(
+            center={'lat': last_ship_lat, 'lon': last_ship_lon},
+            zoom=8,
+        )
+    )
+    map_fig.update_layout(margin={"r":0,"t":20,"l":0,"b":0})
 
     # For scatter plots: full filtered DataFrame
     if len(df_latest_filter) == 0:
