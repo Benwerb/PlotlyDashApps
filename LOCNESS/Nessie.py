@@ -424,62 +424,62 @@ app.layout = dbc.Container([
         ], width=2),
     ]),
     # Third Row - Plotting
-    dbc.Row([
-        # First column (left side)
-        dbc.Col([
-            html.Div([
-                # pHin
-                dbc.Card([
-                    dbc.CardBody([
-                        dcc.Graph(
-                            id='pHin-plot',
-                            style={'height': '70vh', 'width': '100%'}
-                        ),
-                    ])
-                ]),
-            ], style={'padding': '10px', 'backgroundColor': '#e3f2fd'})
-        ], width=6),
-        # Second column (right side)
-        dbc.Col([
-            html.Div([
-                # Second plot or content
-                dbc.Card([
-                    dbc.CardBody([
-                        dcc.Graph(
-                            id='doxy-plot',  # Give it a unique ID
-                            style={'height': '70vh', 'width': '100%'}
-                        ),
-                    ])
-                ]),
-            ], style={'padding': '10px', 'backgroundColor': '#e3f2fd'})
-        ], width=6),
-    ]),
+    # (Removed main plots row)
     # Tabs for lazy loading
-    dcc.Tabs(id='lazy-tabs', value='tab-1', children=[
-        dcc.Tab(label='Physical', value='tab-1', children=[
+    dcc.Tabs(id='lazy-tabs', value='tab-phin-rho', children=[
+        dcc.Tab(label='pH & Rho', value='tab-phin-rho', children=[
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='temp-plot', style={'height': '40vh', 'width': '100%'})
+                            dcc.Graph(id='pHin-plot', style={'height': '70vh', 'width': '100%'})
                         ])
                     ])
-                ], width=4),
+                ], width=6),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='salinity-plot', style={'height': '40vh', 'width': '100%'})
+                            dcc.Graph(id='rho-plot', style={'height': '70vh', 'width': '100%'})
                         ])
                     ])
-                ], width=4),
+                ], width=6),
+            ])
+        ]),
+        dcc.Tab(label='Temperature and Salinity', value='tab-1', children=[
+            dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='chl-plot', style={'height': '40vh', 'width': '100%'})
+                            dcc.Graph(id='temp-plot', style={'height': '70vh', 'width': '100%'})
                         ])
                     ])
-                ], width=4),
-            ]),
+                ], width=6),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(id='salinity-plot', style={'height': '70vh', 'width': '100%'})
+                        ])
+                    ])
+                ], width=6),
+            ])
+        ]),
+        dcc.Tab(label='Oxygen & Chlorophyll', value='tab-oxy-chl', children=[
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(id='doxy-plot', style={'height': '70vh', 'width': '100%'})
+                        ])
+                    ])
+                ], width=6),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(id='chl-plot', style={'height': '70vh', 'width': '100%'})
+                        ])
+                    ])
+                ], width=6),
+            ])
         ]),
         dcc.Tab(label='pH Diagnostics', value='tab-2', children=[
             dbc.Row([
@@ -529,6 +529,24 @@ app.layout = dbc.Container([
                 ], width=4),
             ]),
         ]),
+        # --- New Property Plot Tab ---
+        dcc.Tab(label='Property Plot', value='tab-property', children=[
+            dbc.Row([
+                dbc.Col([
+                    html.Label('Select X-axis:'),
+                    dcc.Dropdown(id='property-x-dropdown'),
+                ], width=3),
+                dbc.Col([
+                    html.Label('Select Y-axis:'),
+                    dcc.Dropdown(id='property-y-dropdown'),
+                ], width=3),
+            ], className='mb-3'),
+            dbc.Row([
+                dbc.Col([
+                    dcc.Graph(id='property-plot', style={'height': '60vh', 'width': '100%'})
+                ], width=12)
+            ])
+        ]),
     ]),
 ], fluid=True, className='dashboard-container')
 
@@ -540,12 +558,17 @@ app.layout = dbc.Container([
      Output('temp-plot', 'figure'),
      Output('salinity-plot', 'figure'),
      Output('chl-plot', 'figure'),
+     Output('rho-plot', 'figure'),
      Output('vrs-plot', 'figure'),
      Output('vrs-std-plot', 'figure'),
      Output('vk-plot', 'figure'),
      Output('vk-std-plot', 'figure'),
      Output('ik-plot', 'figure'),
-     Output('ib-plot', 'figure')],
+     Output('ib-plot', 'figure'),
+     Output('property-plot', 'figure'),  # New output for property plot
+     Output('property-x-dropdown', 'options'), # New output for x dropdown options
+     Output('property-y-dropdown', 'options')  # New output for y dropdown options
+    ],
     [Input('interval-refresh', 'n_intervals'),
      Input('Parameters', 'value'),
      Input('map_options', 'value'),
@@ -553,9 +576,12 @@ app.layout = dbc.Container([
      Input('lazy-tabs', 'value'),
      Input('RangeSlider', 'value'),
      Input('Layers', 'value'),
-     Input('CastDirection', 'value')]
+     Input('CastDirection', 'value'),
+     Input('property-x-dropdown', 'value'), # New input for x axis
+     Input('property-y-dropdown', 'value')  # New input for y axis
+    ]
 )
-def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected_tab, range_value, selected_layer, selected_cast_direction):
+def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected_tab, range_value, selected_layer, selected_cast_direction, property_x, property_y):
     # Load glider and filter by selected gliders
     df_latest = loader.load_data()
     df_latest = filter_glider_assets(df_latest, glider_overlay)
@@ -590,8 +616,14 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         df_map_filtered = df_map_filtered[df_map_filtered['CastDirection'] == 'Mean']
     elif selected_cast_direction == 'Up':
         df_map_filtered = df_map_filtered[df_map_filtered['CastDirection'] == 'Up']
+        df_latest_filter["depth_diff"] = df_latest_filter["Depth[m]"].diff()
+        df_latest_filter = df_latest_filter[df_latest_filter["depth_diff"] < 0]
+        df_latest_filter.drop(columns="depth_diff", inplace=True)
     elif selected_cast_direction == 'Down':
         df_map_filtered = df_map_filtered[df_map_filtered['CastDirection'] == 'Down']
+        df_latest_filter["depth_diff"] = df_latest_filter["Depth[m]"].diff()
+        df_latest_filter = df_latest_filter[df_latest_filter["depth_diff"] > 0]
+        df_latest_filter.drop(columns="depth_diff", inplace=True)
     # Dataframes for map plot
     df_ship = df_map_filtered[df_map_filtered['Cruise'] == "RV Connecticut"]
     df_SN203 = df_map_filtered[df_map_filtered['Cruise'] == "25520301"]
@@ -605,7 +637,8 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         return (
             blank_fig, blank_fig, blank_fig,
             blank_fig, blank_fig, blank_fig,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            blank_fig, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            go.Figure(), [], []
         )
     # Set map center
     if len(df_ship) > 0:
@@ -642,7 +675,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         cscale = 'jet'
     else:
         cmin, cmax = None, None
-        cscale = 'Viridis'
+        cscale = 'Cividis'
     # Only do this if coloring by unixTimestamp
     if selected_parameter == 'unixTimestamp' and len(df_ship) > 0:
         # Get unique unixTimestamps and corresponding datetimes
@@ -661,7 +694,6 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     else:
         tickvals = None
         ticktext = None
-
    
     map_fig.add_trace(go.Scattermap(
             lat=df_ship['lat'],
@@ -807,6 +839,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         scatter_fig_temp = go.Figure()
         scatter_fig_salinity = go.Figure()
         scatter_fig_chl = go.Figure()
+        scatter_fig_rho = go.Figure()
         scatter_fig_vrs = go.Figure()
         scatter_fig_vrs_std = go.Figure()
         scatter_fig_vk = go.Figure()
@@ -839,6 +872,11 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             x="Chl_a[mg/m^3]",
             title="Chl_a[mg/m^3] vs. Depth"
         )
+        scatter_fig_rho = make_depth_scatter_plot(
+            df_latest_filter,
+            x="Sigma_theta[kg/m^3]",
+            title="Sigma_theta[kg/m^3] vs. Depth"
+        )
         scatter_fig_vrs = make_depth_scatter_plot(
             df_latest_filter,
             x="VRS[Volts]",
@@ -869,25 +907,98 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             x="Ib[nA]",
             title="Ib[nA] vs. Depth"
         )
+    # Property plot dropdown options
+    if len(df_latest_filter) > 0:
+        dropdown_options = [
+            {'label': col, 'value': col}
+            for col in df_latest_filter.columns if 'QF' not in col
+        ]
+        # Get unique unixTimestamps and corresponding datetimes
+        unix_vals = df_latest_filter['unixTimestamp'].values
+        datetimes = df_latest_filter['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S').values
+
+        # Choose 10 evenly spaced indices
+        n_ticks = 10
+        if len(unix_vals) > n_ticks:
+            idxs = np.linspace(0, len(unix_vals) - 1, n_ticks, dtype=int)
+            tickvals = unix_vals[idxs]
+            ticktext = datetimes[idxs]
+        else:
+            tickvals = unix_vals
+            ticktext = datetimes
+    else:
+        dropdown_options = []
+    # Property plot figure
+    if selected_tab == 'tab-property' and property_x and property_y and len(df_latest_filter) > 0:
+        fig_property = px.scatter(
+            df_latest_filter, x=property_x, y=property_y,
+            
+            # colorbar=dict(len=1,tickvals=tickvals,ticktext=ticktext),
+            title=f'{property_x} vs. {property_y}',
+            template='plotly_white',
+            color='unixTimestamp' if 'unixTimestamp' in df_latest_filter.columns else None,
+        )
+        fig_property.update_yaxes(autorange="reversed")
+        fig_property.update_traces(marker=dict(size=6))
+        if 'unixTimestamp' in df_latest_filter.columns:
+            fig_property.update_layout(
+                coloraxis_colorbar=dict(
+                    len=1,
+                    tickvals=tickvals,
+                    ticktext=ticktext
+                )
+            )
+    else:
+        fig_property = go.Figure()
     # Always update map, pHin, doxy
-    # Tab 1: update temp, salinity, chla; Tab 2: update vrs, vrs_std, vk, vk_std, ik, ib
-    if selected_tab == 'tab-1':
+    # Tab 1: update temp, salinity; Tab 2: update vrs, vrs_std, vk, vk_std, ik, ib; Tab-phin-rho: update pHin and Rho; Tab-oxy-chl: update O2 and Chl; Tab-property: update property plot
+    if selected_tab == 'tab-phin-rho':
         return (
-            map_fig, scatter_fig_pHin, scatter_fig_doxy,
-            scatter_fig_temp, scatter_fig_salinity, scatter_fig_chl,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            map_fig, scatter_fig_pHin, dash.no_update,
+            dash.no_update, dash.no_update, dash.no_update,
+            scatter_fig_rho,
+            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            go.Figure(), dropdown_options, dropdown_options
+        )
+    elif selected_tab == 'tab-1':
+        return (
+            map_fig, dash.no_update, dash.no_update,
+            scatter_fig_temp, scatter_fig_salinity, dash.no_update,
+            dash.no_update,
+            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            go.Figure(), dropdown_options, dropdown_options
+        )
+    elif selected_tab == 'tab-oxy-chl':
+        return (
+            map_fig, dash.no_update, scatter_fig_doxy,
+            dash.no_update, dash.no_update, scatter_fig_chl,
+            dash.no_update,
+            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            go.Figure(), dropdown_options, dropdown_options
         )
     elif selected_tab == 'tab-2':
         return (
-            map_fig, scatter_fig_pHin, scatter_fig_doxy,
+            map_fig, dash.no_update, dash.no_update,
             dash.no_update, dash.no_update, dash.no_update,
-            scatter_fig_vrs, scatter_fig_vrs_std, scatter_fig_vk, scatter_fig_vk_std, scatter_fig_ik, scatter_fig_ib
+            dash.no_update,
+            scatter_fig_vrs, scatter_fig_vrs_std, scatter_fig_vk, scatter_fig_vk_std, scatter_fig_ik, scatter_fig_ib,
+            go.Figure(), dropdown_options, dropdown_options
+        )
+    elif selected_tab == 'tab-property':
+        return (
+            map_fig, dash.no_update, dash.no_update,
+            dash.no_update, dash.no_update, dash.no_update,
+            dash.no_update,
+            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            fig_property, dropdown_options, dropdown_options
         )
     else:
         return (
-            map_fig, scatter_fig_pHin, scatter_fig_doxy,
+            map_fig, dash.no_update, dash.no_update,
             dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            dash.no_update,
+            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            go.Figure(), dropdown_options, dropdown_options
         )
 
 @app.callback(
@@ -916,4 +1027,6 @@ def update_range_slider(glider_overlay, n):
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port
+    app.run(host="0.0.0.0", port=str(port), debug=True)
+    app.run(host="0.0.0.0", port=str(port), debug=True)
     app.run(host="0.0.0.0", port=str(port), debug=True)
