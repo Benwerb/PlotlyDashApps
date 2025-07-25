@@ -392,11 +392,12 @@ app.layout = dbc.Container([
                         dcc.RadioItems(
                             id='CastDirection',
                             options=[
-                                {'label': 'Mean', 'value': 'Mean'},
+                                {'label': 'Up+Down', 'value': 'UpDown'},
                                 {'label': 'Upcast', 'value': 'Up'},
                                 {'label': 'Downcast', 'value': 'Down'},
+                                {'label': 'Mean', 'value': 'Mean'}
                             ],
-                            value='Mean'
+                            value='UpDown'
                         )
                     ])
                 ])
@@ -613,14 +614,16 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         df_map_filtered = df_map_filtered[df_map_filtered['Layer'] == 'Surface']
     # Filter by cast direction
     if selected_cast_direction == 'Mean':
-        df_map_filtered = df_map_filtered[df_map_filtered['CastDirection'] == 'Mean']
+        df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Mean') | (df_map_filtered['CastDirection'] == 'Constant')]
+    elif selected_cast_direction == 'UpDown':
+        df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Up') | (df_map_filtered['CastDirection'] == 'Down') | (df_map_filtered['CastDirection'] == 'Constant')]
     elif selected_cast_direction == 'Up':
-        df_map_filtered = df_map_filtered[df_map_filtered['CastDirection'] == 'Up']
+        df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Up') | (df_map_filtered['CastDirection'] == 'Constant')]
         df_latest_filter["depth_diff"] = df_latest_filter["Depth[m]"].diff()
         df_latest_filter = df_latest_filter[df_latest_filter["depth_diff"] < 0]
         df_latest_filter.drop(columns="depth_diff", inplace=True)
     elif selected_cast_direction == 'Down':
-        df_map_filtered = df_map_filtered[df_map_filtered['CastDirection'] == 'Down']
+        df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Down') | (df_map_filtered['CastDirection'] == 'Constant')]
         df_latest_filter["depth_diff"] = df_latest_filter["Depth[m]"].diff()
         df_latest_filter = df_latest_filter[df_latest_filter["depth_diff"] > 0]
         df_latest_filter.drop(columns="depth_diff", inplace=True)
