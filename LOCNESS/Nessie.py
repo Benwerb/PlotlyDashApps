@@ -242,7 +242,7 @@ def range_slider_marks(df, target_mark_count=10):
 
 gs = GulfStreamLoader()
 GulfStreamBounds = gs.load_data()
-glider_ids = ['SN203', 'SN209', 'SN070', 'SN0075']
+glider_ids = ['SN203', 'SN209', 'SN210', 'SN211','SN069']
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = cast(List[str | Dict[str, Any]], [dbc.themes.FLATLY])
@@ -352,7 +352,7 @@ app.layout = dbc.Container([
                         dcc.RadioItems(
                             id='Parameters',
                             options=[
-                                {'label': 'unixTimestamp', 'value': 'unixTimestamp'},
+                                {'label': 'Datetime', 'value': 'unixTimestamp'},
                                 {'label': 'temperature [^oC]', 'value': 'temperature'},
                                 {'label': 'salinity [psu]', 'value': 'salinity'},
                                 {'label': 'pHin', 'value': 'pHin'},
@@ -698,12 +698,15 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         tickvals = None
         ticktext = None
    
+    # Set hovertext based on selected parameter
+    ship_hovertext = df_ship['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_ship[selected_parameter]
+    
     map_fig.add_trace(go.Scattermap(
             lat=df_ship['lat'],
             lon=df_ship['lon'],
             mode='markers',
             name='RV Connecticut',
-            hovertext=df_ship[selected_parameter],
+            hovertext=ship_hovertext,
             marker=dict(
                 size=6,
                 color=df_ship[selected_parameter],
@@ -726,12 +729,15 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         ),
         showlegend=False
     ))
+    # Set hovertext for SN209 based on selected parameter
+    sn203_hovertext = df_SN203['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN203[selected_parameter]
+    
     map_fig.add_trace(go.Scattermap(
         lat=df_SN203['lat'],
         lon=df_SN203['lon'],
         mode='markers',
         name='SN203',
-        hovertext=df_SN203[selected_parameter],
+        hovertext=sn203_hovertext,
         marker=dict(
             size=6, 
             color=df_SN203[selected_parameter],
@@ -754,12 +760,15 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         ),
         showlegend=False
     ))
+    # Set hovertext for SN209 based on selected parameter
+    sn209_hovertext = df_SN209['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN209[selected_parameter]
+    
     map_fig.add_trace(go.Scattermap(
     lat=df_SN209['lat'],
     lon=df_SN209['lon'],
     mode='markers',
     name='SN209',
-    hovertext=df_SN209[selected_parameter],
+    hovertext=sn209_hovertext,
     marker=dict(
         size=6, 
         color=df_SN209[selected_parameter],
