@@ -12,6 +12,7 @@ import re
 from data_loader import GliderDataLoader, GulfStreamLoader, MapDataLoader, GliderGridDataLoader, MPADataLoader
 import datetime as dt
 from typing import cast, List, Dict, Any
+import pytz
 
 def get_first_10_pH_average(df_latest):
     df_MLD_average = df_latest.drop_duplicates(subset=['Station', 'Cruise'], keep='first').copy()
@@ -251,7 +252,7 @@ server = app.server # Required for Gunicorn
 
 
 # loader = GliderDataLoader(filenames=['25420901RT.txt', '25520301RT.txt', '25706901RT.txt'])
-loader = GliderDataLoader(filenames=['25706901RT.txt'])
+loader = GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt'])
 # Load the most recent file (automatically done if no filename provided)
 df_latest = loader.load_data()
 map_loader = MapDataLoader()
@@ -261,16 +262,21 @@ date_min, date_max = df_latest["Date"].min(), df_latest["Date"].max()
 unix_min, unix_max = df_latest["unixTimestamp"].min(), df_latest["unixTimestamp"].max() 
 unix_max_minus_12hrs = unix_max - 60*60*12
 marks = range_slider_marks(df_latest, 20)
-
+datetime_max = df_latest["Datetime"].max()
 app.layout = dbc.Container([
     # Top row - Header
     dbc.Row([
         dbc.Col([
             html.H2('NESSIE', className='text-info text-start',
                     style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '10px'}),
-            html.P(f'Last Updated: {df_latest["Datetime"].max().strftime("%Y-%m-%d %H:%M:%S")} UTC', 
-                   className='text-muted text-start',
-                   style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'})
+            html.P(
+                f'Last Updated: '
+                f'{datetime_max.strftime("%Y-%m-%d %H:%M:%S")} UTC | '
+                f'{datetime_max.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")} ET | '
+                f'{datetime_max.tz_localize("UTC").tz_convert("US/Pacific").strftime("%Y-%m-%d %H:%M:%S")} PT',
+                className='text-muted text-start',
+                style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}
+            ),
         ], width=12)
     ]),
     # Map row
@@ -630,8 +636,8 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         df_latest_filter.drop(columns="depth_diff", inplace=True)
     # Dataframes for map plot
     df_ship = df_map_filtered[df_map_filtered['Cruise'] == "RV Connecticut"]
-    df_SN203 = df_map_filtered[df_map_filtered['Cruise'] == "25520301"]
-    df_SN209 = df_map_filtered[df_map_filtered['Cruise'] == "25420901"]
+    # df_SN203 = df_map_filtered[df_map_filtered['Cruise'] == "25520301"]
+    df_SN209 = df_map_filtered[df_map_filtered['Cruise'] == "25720901"]
     df_SN069 = df_map_filtered[df_map_filtered['Cruise'] == "25706901"]
 
     # Handle empty DataFrame case
@@ -653,13 +659,13 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         last_ship_lat = np.array(df_map_filtered['lat'])[-1]
         last_ship_lon = np.array(df_map_filtered['lon'])[-1]
 
-    # Last Glider Location SN203
-    if len(df_SN203) > 0:
-        last_glider_lat_SN203 = np.array(df_SN203['lat'])[-1]
-        last_glider_lon_SN203 = np.array(df_SN203['lon'])[-1]
-    else:
-        last_glider_lat_SN203 = []
-        last_glider_lon_SN203 = []
+    # # Last Glider Location SN203
+    # if len(df_SN203) > 0:
+    #     last_glider_lat_SN203 = np.array(df_SN203['lat'])[-1]
+    #     last_glider_lon_SN203 = np.array(df_SN203['lon'])[-1]
+    # else:
+    #     last_glider_lat_SN203 = []
+    #     last_glider_lon_SN203 = []
     # Last Glider Location SN209
     if len(df_SN209) > 0:
         last_glider_lat_SN209 = np.array(df_SN209['lat'])[-1]
@@ -689,10 +695,10 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         cmin, cmax = None, None
         cscale = 'Cividis'
     # Only do this if coloring by unixTimestamp
-    if selected_parameter == 'unixTimestamp' and len(df_ship) > 0:
+    if selected_parameter == 'unixTimestamp' and len(df_SN069) > 0:
         # Get unique unixTimestamps and corresponding datetimes
-        unix_vals = df_ship['unixTimestamp'].values
-        datetimes = df_ship['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S').values
+        unix_vals = df_SN069['unixTimestamp'].values
+        datetimes = df_SN069['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S').values
 
         # Choose 10 evenly spaced indices
         n_ticks = 10
@@ -720,7 +726,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
                 size=6,
                 color=df_ship[selected_parameter],
                 colorscale=cscale,
-                showscale=True,
+                showscale=False,
                 colorbar=dict(len=0.6,tickvals=tickvals,ticktext=ticktext),
                 cmin=cmin,
                 cmax=cmax,
@@ -731,6 +737,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         lon=[last_ship_lon],
         mode='markers',
         name='RV Connecticut Last Location',
+        hovertext=ship_hovertext,
         marker=dict(
             size=20,
             symbol='ferry',
@@ -738,40 +745,40 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         ),
         showlegend=False
     ))
-    # Set hovertext for SN203 based on selected parameter
-    sn203_hovertext = df_SN203['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN203[selected_parameter]
+    # # Set hovertext for SN203 based on selected parameter
+    # sn203_hovertext = df_SN203['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN203[selected_parameter]
     
-    map_fig.add_trace(go.Scattermap(
-        lat=df_SN203['lat'],
-        lon=df_SN203['lon'],
-        mode='markers',
-        name='SN203',
-        hovertext=sn203_hovertext,
-        marker=dict(
-            size=6, 
-            color=df_SN203[selected_parameter],
-            colorscale=cscale,  
-            showscale=False,
-            colorbar=dict(len=0.6),
-            cmin=cmin,
-            cmax=cmax,
-        ),
-    ))
-    map_fig.add_trace(go.Scattermap(
-        lat=[last_glider_lat_SN203],
-        lon=[last_glider_lon_SN203],
-        mode='markers',
-        name='SN203 Last Location',
-        marker=dict(
-            size=20,
-            symbol='airport',
-            showscale=False,
-        ),
-        showlegend=False
-    ))
+    # map_fig.add_trace(go.Scattermap(
+    #     lat=df_SN203['lat'],
+    #     lon=df_SN203['lon'],
+    #     mode='markers',
+    #     name='SN203',
+    #     hovertext=sn203_hovertext,
+    #     marker=dict(
+    #         size=6, 
+    #         color=df_SN203[selected_parameter],
+    #         colorscale=cscale,  
+    #         showscale=False,
+    #         colorbar=dict(len=0.6),
+    #         cmin=cmin,
+    #         cmax=cmax,
+    #     ),
+    # ))
+    # map_fig.add_trace(go.Scattermap(
+    #     lat=[last_glider_lat_SN203],
+    #     lon=[last_glider_lon_SN203],
+    #     mode='markers',
+    #     name='SN203 Last Location',
+    #     marker=dict(
+    #         size=10,
+    #         symbol='airport',
+    #         showscale=False,
+    #     ),
+    #     showlegend=False
+    # ))
     # Set hovertext for SN209 based on selected parameter
     sn209_hovertext = df_SN209['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN209[selected_parameter]
-    
+    sn209_hovertext_last = np.array(sn209_hovertext)[-1]
     map_fig.add_trace(go.Scattermap(
     lat=df_SN209['lat'],
     lon=df_SN209['lon'],
@@ -792,8 +799,9 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         lon=[last_glider_lon_SN209],
         mode='markers',
         name='SN209 Last Location',
+        hovertext=sn209_hovertext_last,
         marker=dict(
-            size=20,
+            size=10,
             symbol='airport',
             showscale=False,
         ),
@@ -801,7 +809,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     ))
     # Set hovertext for SN069 based on selected parameter
     sn069_hovertext = df_SN069['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN069[selected_parameter]
-    
+    sn069_hovertext_last = np.array(sn069_hovertext)[-1]
     map_fig.add_trace(go.Scattermap(
         lat=df_SN069['lat'],
         lon=df_SN069['lon'],
@@ -812,8 +820,8 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             size=6, 
             color=df_SN069[selected_parameter],
             colorscale=cscale,  
-            showscale=False,
-            colorbar=dict(len=0.6),
+            showscale=True,
+            colorbar=dict(len=0.6,tickvals=tickvals,ticktext=ticktext),
             cmin=cmin,
             cmax=cmax,
         ),
@@ -821,11 +829,11 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     map_fig.add_trace(go.Scattermap(
         lat=[last_glider_lat_SN069],
         lon=[last_glider_lon_SN069],
-        hovertext=sn069_hovertext.iloc[-1],
         mode='markers',
         name='SN069 Last Location',
+        hovertext=sn069_hovertext_last,
         marker=dict(
-            size=20,
+            size=10,
             symbol='airport',
             showscale=False,
         ),
@@ -1075,7 +1083,7 @@ def update_range_slider(glider_overlay, n):
     unix_min = df_map["unixTimestamp"].min()
     unix_max = df_map["unixTimestamp"].max()
     unix_max_minus_12hrs = unix_max - 60*60*12
-    marks = range_slider_marks(df_map, 20)
+    marks = range_slider_marks(df_map, 20) # Need to fix the marks
     return unix_min, unix_max, [unix_min, unix_max], marks
 
 if __name__ == '__main__':
