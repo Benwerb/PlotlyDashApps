@@ -250,7 +250,8 @@ app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server # Required for Gunicorn
 
 
-loader = GliderDataLoader(filenames=['25420901RT.txt', '25520301RT.txt'])
+# loader = GliderDataLoader(filenames=['25420901RT.txt', '25520301RT.txt', '25706901RT.txt'])
+loader = GliderDataLoader(filenames=['25706901RT.txt'])
 # Load the most recent file (automatically done if no filename provided)
 df_latest = loader.load_data()
 map_loader = MapDataLoader()
@@ -397,7 +398,7 @@ app.layout = dbc.Container([
                                 {'label': 'Downcast', 'value': 'Down'},
                                 {'label': 'Mean', 'value': 'Mean'}
                             ],
-                            value='UpDown'
+                            value='Up'
                         )
                     ])
                 ])
@@ -631,6 +632,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     df_ship = df_map_filtered[df_map_filtered['Cruise'] == "RV Connecticut"]
     df_SN203 = df_map_filtered[df_map_filtered['Cruise'] == "25520301"]
     df_SN209 = df_map_filtered[df_map_filtered['Cruise'] == "25420901"]
+    df_SN069 = df_map_filtered[df_map_filtered['Cruise'] == "25706901"]
 
     # Handle empty DataFrame case
     is_map_df = isinstance(df_map_filtered, pd.DataFrame)
@@ -665,6 +667,13 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     else:
         last_glider_lat_SN209 = []
         last_glider_lon_SN209 = []
+    # Last Glider Location SN069
+    if len(df_SN069) > 0:
+        last_glider_lat_SN069 = np.array(df_SN069['lat'])[-1]
+        last_glider_lon_SN069 = np.array(df_SN069['lon'])[-1]
+    else:
+        last_glider_lat_SN069 = []
+        last_glider_lon_SN069 = []
     map_fig = go.Figure()
     # Set hard color limits for pHin and rhodamine
     if selected_parameter == 'pHin' and selected_layer == 'Surface':
@@ -729,7 +738,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         ),
         showlegend=False
     ))
-    # Set hovertext for SN209 based on selected parameter
+    # Set hovertext for SN203 based on selected parameter
     sn203_hovertext = df_SN203['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN203[selected_parameter]
     
     map_fig.add_trace(go.Scattermap(
@@ -783,6 +792,38 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         lon=[last_glider_lon_SN209],
         mode='markers',
         name='SN209 Last Location',
+        marker=dict(
+            size=20,
+            symbol='airport',
+            showscale=False,
+        ),
+        showlegend=False
+    ))
+    # Set hovertext for SN069 based on selected parameter
+    sn069_hovertext = df_SN069['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN069[selected_parameter]
+    
+    map_fig.add_trace(go.Scattermap(
+        lat=df_SN069['lat'],
+        lon=df_SN069['lon'],
+        mode='markers',
+        name='SN069',
+        hovertext=sn069_hovertext,
+        marker=dict(
+            size=6, 
+            color=df_SN069[selected_parameter],
+            colorscale=cscale,  
+            showscale=False,
+            colorbar=dict(len=0.6),
+            cmin=cmin,
+            cmax=cmax,
+        ),
+    ))
+    map_fig.add_trace(go.Scattermap(
+        lat=[last_glider_lat_SN069],
+        lon=[last_glider_lon_SN069],
+        hovertext=sn069_hovertext.iloc[-1],
+        mode='markers',
+        name='SN069 Last Location',
         marker=dict(
             size=20,
             symbol='airport',
@@ -886,8 +927,8 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         )
         scatter_fig_rho = make_depth_scatter_plot(
             df_latest_filter,
-            x="Sigma_theta[kg/m^3]",
-            title="Sigma_theta[kg/m^3] vs. Depth"
+            x="RHODAMINE[ppb]",
+            title="RHODAMINE[ppb] vs. Depth"
         )
         scatter_fig_vrs = make_depth_scatter_plot(
             df_latest_filter,

@@ -79,6 +79,32 @@ class GliderDataLoader:
             df['source_file'] = fname  # optional: keep track of file origin
             dfs.append(df)
 
+        # # Ensure all DataFrames have the same columns before concatenation
+        # if dfs:
+        #     # Get all unique columns from all DataFrames
+        #     all_columns = set()
+        #     for df in dfs:
+        #         all_columns.update(df.columns)
+            
+        #     # Add missing columns to each DataFrame with appropriate data types
+        #     for i, df in enumerate(dfs):
+        #         missing_columns = all_columns - set(df.columns)
+        #         for col in missing_columns:
+        #             # Determine appropriate dtype based on column name or existing data
+        #             if 'Date' in col or 'Datetime' in col:
+        #                 dfs[i][col] = pd.Series(dtype='datetime64[ns]')
+        #             elif 'unixTimestamp' in col:
+        #                 dfs[i][col] = pd.Series(dtype='int64')
+        #             elif any(numeric_col in col for numeric_col in ['Temp', 'Sal', 'O2', 'pH', 'Depth', 'Lat', 'Lon']):
+        #                 dfs[i][col] = pd.Series(dtype='float64')
+        #             else:
+        #                 dfs[i][col] = pd.Series(dtype='object')
+            
+        #     # Ensure all DataFrames have columns in the same order
+        #     column_order = sorted(list(all_columns))
+        #     for i, df in enumerate(dfs):
+        #         dfs[i] = df.reindex(columns=column_order)
+
         return pd.concat(dfs, ignore_index=True)
 
 class GulfStreamLoader:
