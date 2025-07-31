@@ -246,7 +246,8 @@ def make_depth_line_plot(
         y=y,
         color=color,
         labels=labels,
-        title=title
+        title=title,
+        markers=True
     )
 
     # Reverse y-axis (for depth plots)
