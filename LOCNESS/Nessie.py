@@ -197,6 +197,78 @@ def make_depth_scatter_plot(
 
     return fig
 
+def make_depth_line_plot(
+    df, x, y="Depth[m]", title=None,
+    color="Station", symbol="Cruise",
+    labels=None,
+    colorbar_title=None,
+    colorbar_orientation='v'
+):
+    """
+    Create a reusable line plot of a variable vs. depth with consistent styling.
+
+    Parameters:
+    ----------
+    df : DataFrame
+        Input data.
+    x : str
+        Column name for x-axis.
+    y : str
+        Column name for y-axis (default: "Depth[m]").
+    title : str or None
+        Plot title. If None, a default is generated.
+    color : str
+        Column to use for color.
+    symbol : str
+        Column to use for symbol.
+    labels : dict or None
+        Custom axis labels.
+    colorbar_title : str or None
+        Title for the colorbar. Defaults to the `color` column name.
+    colorbar_orientation : str
+        'v' or 'h' for vertical or horizontal colorbar.
+
+    Returns:
+    -------
+    fig : plotly.graph_objects.Figure
+        Styled line plot.
+    """
+    if title is None:
+        title = f"{x} vs. {y}"
+    if labels is None:
+        labels = {x: x, y: y, color: color, symbol: symbol}
+    if colorbar_title is None:
+        colorbar_title = color
+
+    fig = px.line(
+        df,
+        x=x,
+        y=y,
+        color=color,
+        labels=labels,
+        title=title
+    )
+
+    # Reverse y-axis (for depth plots)
+    fig.update_yaxes(autorange="reversed")
+
+    # Add colorbar settings
+    colorbar_config = dict(
+        title=dict(text=colorbar_title),
+        orientation=colorbar_orientation,
+        len=0.8,
+        thickness=25
+    )
+
+    if colorbar_orientation == 'v':
+        colorbar_config.update(x=1.02, y=0.5)
+    else:
+        colorbar_config.update(x=0.5, y=-0.2, xanchor='center', yanchor='top')
+
+    fig.update_layout(coloraxis_colorbar=colorbar_config)
+
+    return fig
+
 def range_slider_marks(df, target_mark_count=10):
     """
     Generate RangeSlider marks at evenly spaced full-hour intervals,
@@ -714,37 +786,40 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         ticktext = None
    
     # Set hovertext based on selected parameter
-    ship_hovertext = df_ship['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_ship[selected_parameter]
-    
-    map_fig.add_trace(go.Scattermap(
-            lat=df_ship['lat'],
-            lon=df_ship['lon'],
+    if len(df_ship) > 0:
+        ship_hovertext = df_ship['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_ship[selected_parameter]
+        
+        map_fig.add_trace(go.Scattermap(
+                lat=df_ship['lat'],
+                lon=df_ship['lon'],
+                mode='markers',
+                name='RV Connecticut',
+                hovertext=ship_hovertext,
+                marker=dict(
+                    size=6,
+                    color=df_ship[selected_parameter],
+                    colorscale=cscale,
+                    showscale=False,
+                    colorbar=dict(len=0.6,tickvals=tickvals,ticktext=ticktext),
+                    cmin=cmin,
+                    cmax=cmax,
+                ),
+            ))
+        map_fig.add_trace(go.Scattermap(
+            lat=[last_ship_lat],
+            lon=[last_ship_lon],
             mode='markers',
-            name='RV Connecticut',
+            name='RV Connecticut Last Location',
             hovertext=ship_hovertext,
             marker=dict(
-                size=6,
-                color=df_ship[selected_parameter],
-                colorscale=cscale,
+                size=20,
+                symbol='ferry',
                 showscale=False,
-                colorbar=dict(len=0.6,tickvals=tickvals,ticktext=ticktext),
-                cmin=cmin,
-                cmax=cmax,
             ),
+            showlegend=False
         ))
-    map_fig.add_trace(go.Scattermap(
-        lat=[last_ship_lat],
-        lon=[last_ship_lon],
-        mode='markers',
-        name='RV Connecticut Last Location',
-        hovertext=ship_hovertext,
-        marker=dict(
-            size=20,
-            symbol='ferry',
-            showscale=False,
-        ),
-        showlegend=False
-    ))
+    else:
+        print(f"Ship data is empty - no data points in the selected range")
     # # Set hovertext for SN203 based on selected parameter
     # sn203_hovertext = df_SN203['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN203[selected_parameter]
     
@@ -777,68 +852,74 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     #     showlegend=False
     # ))
     # Set hovertext for SN209 based on selected parameter
-    sn209_hovertext = df_SN209['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN209[selected_parameter]
-    sn209_hovertext_last = np.array(sn209_hovertext)[-1]
-    map_fig.add_trace(go.Scattermap(
-    lat=df_SN209['lat'],
-    lon=df_SN209['lon'],
-    mode='markers',
-    name='SN209',
-    hovertext=sn209_hovertext,
-    marker=dict(
-        size=6, 
-        color=df_SN209[selected_parameter],
-        colorscale=cscale,
-        showscale=False,
-        cmin=cmin,
-        cmax=cmax,
-    ),
-    ))
-    map_fig.add_trace(go.Scattermap(
-        lat=[last_glider_lat_SN209],
-        lon=[last_glider_lon_SN209],
+    if len(df_SN209) > 0:
+        sn209_hovertext = df_SN209['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN209[selected_parameter]
+        sn209_hovertext_last = np.array(sn209_hovertext)[-1]
+        map_fig.add_trace(go.Scattermap(
+        lat=df_SN209['lat'],
+        lon=df_SN209['lon'],
         mode='markers',
-        name='SN209 Last Location',
-        hovertext=sn209_hovertext_last,
-        marker=dict(
-            size=10,
-            symbol='airport',
-            showscale=False,
-        ),
-        showlegend=False
-    ))
-    # Set hovertext for SN069 based on selected parameter
-    sn069_hovertext = df_SN069['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN069[selected_parameter]
-    sn069_hovertext_last = np.array(sn069_hovertext)[-1]
-    map_fig.add_trace(go.Scattermap(
-        lat=df_SN069['lat'],
-        lon=df_SN069['lon'],
-        mode='markers',
-        name='SN069',
-        hovertext=sn069_hovertext,
+        name='SN209',
+        hovertext=sn209_hovertext,
         marker=dict(
             size=6, 
-            color=df_SN069[selected_parameter],
-            colorscale=cscale,  
-            showscale=True,
-            colorbar=dict(len=0.6,tickvals=tickvals,ticktext=ticktext),
+            color=df_SN209[selected_parameter],
+            colorscale=cscale,
+            showscale=False,
             cmin=cmin,
             cmax=cmax,
         ),
-    ))
-    map_fig.add_trace(go.Scattermap(
-        lat=[last_glider_lat_SN069],
-        lon=[last_glider_lon_SN069],
-        mode='markers',
-        name='SN069 Last Location',
-        hovertext=sn069_hovertext_last,
-        marker=dict(
-            size=10,
-            symbol='airport',
-            showscale=False,
-        ),
-        showlegend=False
-    ))
+        ))
+        map_fig.add_trace(go.Scattermap(
+            lat=[last_glider_lat_SN209],
+            lon=[last_glider_lon_SN209],
+            mode='markers',
+            name='SN209 Last Location',
+            hovertext=sn209_hovertext_last,
+            marker=dict(
+                size=10,
+                symbol='airport',
+                showscale=False,
+            ),
+            showlegend=False
+        ))
+    else:
+        print(f"SN209 data is empty - no data points in the selected range")
+    # Set hovertext for SN069 based on selected parameter
+    if len(df_SN069) > 0:
+        sn069_hovertext = df_SN069['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN069[selected_parameter]
+        sn069_hovertext_last = np.array(sn069_hovertext)[-1]
+        map_fig.add_trace(go.Scattermap(
+            lat=df_SN069['lat'],
+            lon=df_SN069['lon'],
+            mode='markers',
+            name='SN069',
+            hovertext=sn069_hovertext,
+            marker=dict(
+                size=6, 
+                color=df_SN069[selected_parameter],
+                colorscale=cscale,  
+                showscale=True,
+                colorbar=dict(len=0.6,tickvals=tickvals,ticktext=ticktext),
+                cmin=cmin,
+                cmax=cmax,
+            ),
+        ))
+        map_fig.add_trace(go.Scattermap(
+            lat=[last_glider_lat_SN069],
+            lon=[last_glider_lon_SN069],
+            mode='markers',
+            name='SN069 Last Location',
+            hovertext=sn069_hovertext_last,
+            marker=dict(
+                size=10,
+                symbol='airport',
+                showscale=False,
+            ),
+            showlegend=False
+        ))
+    else:
+        print(f"SN069 data is empty - no data points in the selected range")
     if 'overlay' in map_options:
         map_fig.add_trace(go.Scattermap(
         lat=GulfStreamBounds['Lat'],
@@ -908,7 +989,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         scatter_fig_ik = go.Figure()
         scatter_fig_ib = go.Figure()
     else:
-        scatter_fig_pHin = make_depth_scatter_plot(
+        scatter_fig_pHin = make_depth_line_plot(
             df_latest_filter,
             x="pHinsitu[Total]",
             title="pHinsitu[Total] vs. Depth"
@@ -933,7 +1014,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             x="Chl_a[mg/m^3]",
             title="Chl_a[mg/m^3] vs. Depth"
         )
-        scatter_fig_rho = make_depth_scatter_plot(
+        scatter_fig_rho = make_depth_line_plot(
             df_latest_filter,
             x="RHODAMINE[ppb]",
             title="RHODAMINE[ppb] vs. Depth"
