@@ -702,15 +702,11 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     elif selected_cast_direction == 'UpDown':
         df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Up') | (df_map_filtered['CastDirection'] == 'Down') | (df_map_filtered['CastDirection'] == 'Constant')]
     elif selected_cast_direction == 'Up':
-        # df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Up') | (df_map_filtered['CastDirection'] == 'Constant')]
-        # df_latest_filter["depth_diff"] = df_latest_filter["Depth[m]"].diff()
+        df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Up') | (df_map_filtered['CastDirection'] == 'Constant')]
         df_latest_filter = df_latest_filter[df_latest_filter["DIVEDIR"] == 1]
-        # df_latest_filter.drop(columns="depth_diff", inplace=True)
     elif selected_cast_direction == 'Down':
-        # df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Down') | (df_map_filtered['CastDirection'] == 'Constant')]
-        # df_latest_filter["depth_diff"] = df_latest_filter["Depth[m]"].diff()
+        df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Down') | (df_map_filtered['CastDirection'] == 'Constant')]
         df_latest_filter = df_latest_filter[df_latest_filter["DIVEDIR"] == -1]
-        # df_latest_filter.drop(columns="depth_diff", inplace=True)
     # Dataframes for map plot
     df_ship = df_map_filtered[df_map_filtered['Cruise'] == "RV Connecticut"]
     # df_SN203 = df_map_filtered[df_map_filtered['Cruise'] == "25520301"]
