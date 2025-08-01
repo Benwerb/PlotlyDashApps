@@ -512,7 +512,7 @@ app.layout = dbc.Container([
     # (Removed main plots row)
     # Tabs for lazy loading
     dcc.Tabs(id='lazy-tabs', value='tab-phin-rho', children=[
-        dcc.Tab(label='pH & Rho', value='tab-phin-rho', children=[
+        dcc.Tab(label='pH & Rhodamine', value='tab-phin-rho', children=[
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -691,11 +691,18 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             (df_map['unixTimestamp'] >= range_value[0]) &
             (df_map['unixTimestamp'] <= range_value[1])
         ]
-    # Filter by layers
+    # Preserve all WPT rows
+    wpt_rows = df_map_filtered[df_map_filtered['Layer'] == 'WPT']
+
+    # Filter by layers (only for non-WPT rows)
+    non_wpt_rows = df_map_filtered[df_map_filtered['Layer'] != 'WPT']
     if selected_layer == 'MLD':
-        df_map_filtered = df_map_filtered[df_map_filtered['Layer'] == 'MLD']
+        non_wpt_rows = non_wpt_rows[non_wpt_rows['Layer'] == 'MLD']
     elif selected_layer == 'Surface':
-        df_map_filtered = df_map_filtered[df_map_filtered['Layer'] == 'Surface']
+        non_wpt_rows = non_wpt_rows[non_wpt_rows['Layer'] == 'Surface']
+
+    # Recombine WPT and filtered rows
+    df_map_filtered = pd.concat([non_wpt_rows, wpt_rows], ignore_index=True)
     # Filter by cast direction
     if selected_cast_direction == 'Mean':
         df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Mean') | (df_map_filtered['CastDirection'] == 'Constant')]
@@ -709,9 +716,10 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         df_latest_filter = df_latest_filter[df_latest_filter["DIVEDIR"] == -1]
     # Dataframes for map plot
     df_ship = df_map_filtered[df_map_filtered['Cruise'] == "RV Connecticut"]
-    # df_SN203 = df_map_filtered[df_map_filtered['Cruise'] == "25520301"]
-    df_SN209 = df_map_filtered[df_map_filtered['Cruise'] == "25720901"]
-    df_SN069 = df_map_filtered[df_map_filtered['Cruise'] == "25706901"]
+    df_SN209 = df_map_filtered[(df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] != 'WPT')]
+    df_SN069 = df_map_filtered[(df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] != 'WPT')]
+    df_SN209_nxt = df_map_filtered[(df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] == 'WPT')]
+    df_SN069_nxt = df_map_filtered[(df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] == 'WPT')]
 
     # Handle empty DataFrame case
     is_map_df = isinstance(df_map_filtered, pd.DataFrame)
@@ -732,27 +740,28 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         last_ship_lat = np.array(df_map_filtered['lat'])[-1]
         last_ship_lon = np.array(df_map_filtered['lon'])[-1]
 
-    # # Last Glider Location SN203
-    # if len(df_SN203) > 0:
-    #     last_glider_lat_SN203 = np.array(df_SN203['lat'])[-1]
-    #     last_glider_lon_SN203 = np.array(df_SN203['lon'])[-1]
-    # else:
-    #     last_glider_lat_SN203 = []
-    #     last_glider_lon_SN203 = []
     # Last Glider Location SN209
     if len(df_SN209) > 0:
         last_glider_lat_SN209 = np.array(df_SN209['lat'])[-1]
         last_glider_lon_SN209 = np.array(df_SN209['lon'])[-1]
+        next_glider_lat_SN209 = np.array(df_SN209_nxt['lat'])[-1]
+        next_glider_lon_SN209 = np.array(df_SN209_nxt['lon'])[-1]
     else:
         last_glider_lat_SN209 = []
         last_glider_lon_SN209 = []
+        next_glider_lat_SN209 = []
+        next_glider_lon_SN209 = []
     # Last Glider Location SN069
     if len(df_SN069) > 0:
         last_glider_lat_SN069 = np.array(df_SN069['lat'])[-1]
         last_glider_lon_SN069 = np.array(df_SN069['lon'])[-1]
+        next_glider_lat_SN069 = np.array(df_SN069_nxt['lat'])[-1]
+        next_glider_lon_SN069 = np.array(df_SN069_nxt['lon'])[-1]
     else:
         last_glider_lat_SN069 = []
         last_glider_lon_SN069 = []
+        next_glider_lat_SN069 = []
+        next_glider_lon_SN069 = []
     map_fig = go.Figure()
     # Set hard color limits for pHin and rhodamine
     if selected_parameter == 'pHin' and selected_layer == 'Surface':
@@ -819,43 +828,13 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             ),
             showlegend=False
         ))
-    else:
-        print(f"Ship data is empty - no data points in the selected range")
-    # # Set hovertext for SN203 based on selected parameter
-    # sn203_hovertext = df_SN203['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN203[selected_parameter]
-    
-    # map_fig.add_trace(go.Scattermap(
-    #     lat=df_SN203['lat'],
-    #     lon=df_SN203['lon'],
-    #     mode='markers',
-    #     name='SN203',
-    #     hovertext=sn203_hovertext,
-    #     marker=dict(
-    #         size=6, 
-    #         color=df_SN203[selected_parameter],
-    #         colorscale=cscale,  
-    #         showscale=False,
-    #         colorbar=dict(len=0.6),
-    #         cmin=cmin,
-    #         cmax=cmax,
-    #     ),
-    # ))
-    # map_fig.add_trace(go.Scattermap(
-    #     lat=[last_glider_lat_SN203],
-    #     lon=[last_glider_lon_SN203],
-    #     mode='markers',
-    #     name='SN203 Last Location',
-    #     marker=dict(
-    #         size=10,
-    #         symbol='airport',
-    #         showscale=False,
-    #     ),
-    #     showlegend=False
-    # ))
+
     # Set hovertext for SN209 based on selected parameter
     if len(df_SN209) > 0:
         sn209_hovertext = df_SN209['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN209[selected_parameter]
+        sn209_hovertext_proj = df_SN209_nxt['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN209_nxt[selected_parameter]
         sn209_hovertext_last = np.array(sn209_hovertext)[-1]
+        sn209_hovertext_nxt = np.array(sn209_hovertext_proj)[-1]
         map_fig.add_trace(go.Scattermap(
         lat=df_SN209['lat'],
         lon=df_SN209['lon'],
@@ -863,13 +842,26 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         name='SN209',
         hovertext=sn209_hovertext,
         marker=dict(
-            size=6, 
+            size=10, 
             color=df_SN209[selected_parameter],
             colorscale=cscale,
             showscale=False,
             cmin=cmin,
             cmax=cmax,
         ),
+        ))
+        map_fig.add_trace(go.Scattermap(
+        lat=[next_glider_lat_SN209],
+        lon=[next_glider_lon_SN209],
+        mode='markers',
+        name='SN209 Next Location',
+        hovertext=sn209_hovertext_nxt,
+        marker=dict(
+            size=15,
+            symbol='swimming',
+            showscale=False,
+        ),
+        showlegend=False
         ))
         map_fig.add_trace(go.Scattermap(
             lat=[last_glider_lat_SN209],
@@ -884,12 +876,12 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             ),
             showlegend=False
         ))
-    else:
-        print(f"SN209 data is empty - no data points in the selected range")
     # Set hovertext for SN069 based on selected parameter
     if len(df_SN069) > 0:
         sn069_hovertext = df_SN069['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN069[selected_parameter]
+        sn069_hovertext_proj = df_SN069_nxt['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN069_nxt[selected_parameter]
         sn069_hovertext_last = np.array(sn069_hovertext)[-1]
+        sn069_hovertext_nxt = np.array(sn069_hovertext_proj)[-1]
         map_fig.add_trace(go.Scattermap(
             lat=df_SN069['lat'],
             lon=df_SN069['lon'],
@@ -897,7 +889,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             name='SN069',
             hovertext=sn069_hovertext,
             marker=dict(
-                size=6, 
+                size=10, 
                 color=df_SN069[selected_parameter],
                 colorscale=cscale,  
                 showscale=True,
@@ -905,6 +897,19 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
                 cmin=cmin,
                 cmax=cmax,
             ),
+        ))      
+        map_fig.add_trace(go.Scattermap(
+            lat=[next_glider_lat_SN069],
+            lon=[next_glider_lon_SN069],
+            mode='markers',
+            name='SN069 Next Location',
+            hovertext=sn069_hovertext_nxt,
+            marker=dict(
+                size=15,
+                symbol='swimming',
+                showscale=False,
+            ),
+            showlegend=False
         ))
         map_fig.add_trace(go.Scattermap(
             lat=[last_glider_lat_SN069],
@@ -919,8 +924,6 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             ),
             showlegend=False
         ))
-    else:
-        print(f"SN069 data is empty - no data points in the selected range")
     if 'overlay' in map_options:
         map_fig.add_trace(go.Scattermap(
         lat=GulfStreamBounds['Lat'],
@@ -1166,7 +1169,7 @@ def update_range_slider(glider_overlay, n):
     unix_max = df_map["unixTimestamp"].max()
     unix_max_minus_12hrs = unix_max - 60*60*12
     marks = range_slider_marks(df_map, 20) # Need to fix the marks
-    return unix_min, unix_max, [unix_min, unix_max], marks
+    return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port
