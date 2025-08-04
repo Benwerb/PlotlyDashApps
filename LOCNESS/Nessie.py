@@ -239,7 +239,10 @@ def make_depth_line_plot(
         labels = {x: x, y: y, color: color, symbol: symbol}
     if colorbar_title is None:
         colorbar_title = color
-
+    # Get unique values and assign colors
+    unique_vals = df[color].unique()
+    num_colors = len(unique_vals)
+    viridis_colors = px.colors.sample_colorscale("Cividis", [i / (num_colors - 1) for i in range(num_colors)])
     fig = px.line(
         df,
         x=x,
@@ -247,7 +250,8 @@ def make_depth_line_plot(
         color=color,
         labels=labels,
         title=title,
-        markers=True
+        markers=True,
+        color_discrete_sequence=viridis_colors
     )
 
     # Reverse y-axis (for depth plots)
@@ -337,20 +341,37 @@ unix_max_minus_12hrs = unix_max - 60*60*12
 marks = range_slider_marks(df_latest, 20)
 datetime_max = df_latest["Datetime"].max()
 # Need function to replace these!
-# utc_str = datetime_max.strftime("%Y-%m-%d %H:%M:%S")
-# et_str = datetime_max.tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
-# pt_str = datetime_max.tz_convert("US/Pacific").strftime("%Y-%m-%d %H:%M:%S")
+utc_str = datetime_max.strftime("%Y-%m-%d %H:%M:%S")
+et_str = datetime_max.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
+pt_str = datetime_max.tz_localize("UTC").tz_convert("US/Pacific").strftime("%Y-%m-%d %H:%M:%S")
+update_str = f'Last Updated: {utc_str} UTC | {et_str} ET | {pt_str} PT'
 app.layout = dbc.Container([
     # Top row - Header
     dbc.Row([
         dbc.Col([
             html.H2('NESSIE', className='text-info text-start',
                     style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '10px'}),
+        #     html.P([
+        #     "Data Visualization for the ",
+        #     html.A("LOCNESS Project", href="https://subhaslab.whoi.edu/loc-ness/", target="_blank", className="text-info")
+        # ]),
             html.P(
-                f'Last Updated: '
-                f'{datetime_max.strftime("%Y-%m-%d %H:%M:%S")} UTC | '
-                f'{datetime_max.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")} ET | '
-                f'{datetime_max.tz_localize("UTC").tz_convert("US/Pacific").strftime("%Y-%m-%d %H:%M:%S")} PT',
+                id='update-text',
+                className='text-muted text-start',
+                style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}
+            ),
+            html.P(
+                'GliderID, Next Surface Time (ET), lat, lon, +/- distance [m]',
+                className='text-muted text-start',
+                style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}
+            ),
+            html.P(
+                id='update-projection-text-069',
+                className='text-muted text-start',
+                style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}
+            ),
+            html.P(
+                id='update-projection-text-209',
                 className='text-muted text-start',
                 style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}
             ),
@@ -614,7 +635,7 @@ app.layout = dbc.Container([
                 ], width=4),
             ]),
         ]),
-        # --- New Property Plot Tab ---
+        # --- Property Plot Tab ---
         dcc.Tab(label='Property Plot', value='tab-property', children=[
             dbc.Row([
                 dbc.Col([
@@ -780,7 +801,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     if selected_parameter == 'unixTimestamp' and len(df_SN069) > 0:
         # Get unique unixTimestamps and corresponding datetimes
         unix_vals = df_SN069['unixTimestamp'].values
-        datetimes = df_SN069['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S').values
+        datetimes = df_SN069['Datetime'].dt.strftime('%m/%d %H:%M').values
 
         # Choose 10 evenly spaced indices
         n_ticks = 10
@@ -893,7 +914,17 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
                 color=df_SN069[selected_parameter],
                 colorscale=cscale,  
                 showscale=True,
-                colorbar=dict(len=0.6,tickvals=tickvals,ticktext=ticktext),
+                colorbar=dict(
+                    len=0.6,              # length of colorbar
+                    thickness=15,         # width (since vertical)
+                    tickvals=tickvals,
+                    ticktext=ticktext,
+                    x=0.98,               # near the right edge of the plot
+                    y=0.5,                # center vertically
+                    xanchor='right',      # anchor the right side of the bar to x=0.98
+                    yanchor='middle',     # anchor the middle vertically
+                    # orientation='v'     # optional, vertical is default
+                    ),
                 cmin=cmin,
                 cmax=cmax,
             ),
@@ -977,6 +1008,17 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         )
     )
     map_fig.update_layout(margin={"r":0,"t":20,"l":0,"b":0})
+    map_fig.update_layout(
+    legend=dict(
+        x=0.99,              # near the far right
+        y=0.99,              # near the top
+        xanchor='right',     # anchor the right side of the box at x
+        yanchor='top',       # anchor the top of the box at y
+        bgcolor='rgba(255,255,255,0.5)',  # semi-transparent background
+        bordercolor='black',
+        borderwidth=1
+    )
+)
 
     # For scatter plots: full filtered DataFrame
     if len(df_latest_filter) == 0:
@@ -998,22 +1040,22 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             x="pHinsitu[Total]",
             title="pHinsitu[Total] vs. Depth"
         )
-        scatter_fig_doxy = make_depth_scatter_plot(
+        scatter_fig_doxy = make_depth_line_plot(
             df_latest_filter,
             x="Oxygen[µmol/kg]",
             title="Oxygen[µmol/kg] vs. Depth"
         )
-        scatter_fig_temp = make_depth_scatter_plot(
+        scatter_fig_temp = make_depth_line_plot(
             df_latest_filter,
             x="Temperature[°C]",
             title="Temperature[°C] vs. Depth"
         )
-        scatter_fig_salinity = make_depth_scatter_plot(
+        scatter_fig_salinity = make_depth_line_plot(
             df_latest_filter,
             x="Salinity[pss]",
             title="Salinity[pss] vs. Depth"
         )
-        scatter_fig_chl = make_depth_scatter_plot(
+        scatter_fig_chl = make_depth_line_plot(
             df_latest_filter,
             x="Chl_a[mg/m^3]",
             title="Chl_a[mg/m^3] vs. Depth"
@@ -1023,32 +1065,32 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             x="RHODAMINE[ppb]",
             title="RHODAMINE[ppb] vs. Depth"
         )
-        scatter_fig_vrs = make_depth_scatter_plot(
+        scatter_fig_vrs = make_depth_line_plot(
             df_latest_filter,
             x="VRS[Volts]",
             title="VRS[Volts] vs. Depth"
         )
-        scatter_fig_vrs_std = make_depth_scatter_plot(
+        scatter_fig_vrs_std = make_depth_line_plot(
             df_latest_filter,
             x="VRS_STD[Volts]",
             title="VRS_STD[Volts] vs. Depth"
         )
-        scatter_fig_vk = make_depth_scatter_plot(
+        scatter_fig_vk = make_depth_line_plot(
             df_latest_filter,
             x="VK[Volts]",
             title="VK[Volts] vs. Depth"
         )
-        scatter_fig_vk_std = make_depth_scatter_plot(
+        scatter_fig_vk_std = make_depth_line_plot(
             df_latest_filter,
             x="VK_STD[Volts]",
             title="VK_STD[Volts] vs. Depth"
         )
-        scatter_fig_ik = make_depth_scatter_plot(
+        scatter_fig_ik = make_depth_line_plot(
             df_latest_filter,
             x="IK[nA]",
             title="IK[nA] vs. Depth"
         )
-        scatter_fig_ib = make_depth_scatter_plot(
+        scatter_fig_ib = make_depth_line_plot(
             df_latest_filter,
             x="Ib[nA]",
             title="Ib[nA] vs. Depth"
@@ -1153,6 +1195,9 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         Output('RangeSlider', 'max'),
         Output('RangeSlider', 'value'),
         Output('RangeSlider', 'marks'),
+        Output('update-text', 'children'),
+        Output('update-projection-text-069', 'children'),
+        Output('update-projection-text-209', 'children')
     ],
     [
         Input('glider_overlay_checklist', 'value'),
@@ -1169,7 +1214,20 @@ def update_range_slider(glider_overlay, n):
     unix_max = df_map["unixTimestamp"].max()
     unix_max_minus_12hrs = unix_max - 60*60*12
     marks = range_slider_marks(df_map, 20) # Need to fix the marks
-    return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks
+
+    # MAKE THIS ALL A TABLE NOT STRINGS
+    datetime_max = df_map[df_map['Layer'] != 'WPT']["Datetime"].max() # Filter out WPT rows because they are ahead of time
+    utc_str = datetime_max.strftime("%Y-%m-%d %H:%M:%S")
+    et_str = datetime_max.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
+    pt_str = datetime_max.tz_localize("UTC").tz_convert("US/Pacific").strftime("%Y-%m-%d %H:%M:%S")
+    update_str = f'Last Updated: {utc_str} UTC | {et_str} ET | {pt_str} PT'
+    map_069 = df_map[(df_map['Layer'] == 'WPT') & (df_map['Cruise'] == '25706901')].iloc[-1]
+    map_069_dt_utc = map_069["Datetime"].strftime("%Y-%m-%d %H:%M:%S")
+    map_209 = df_map[(df_map['Layer'] == 'WPT') & (df_map['Cruise'] == '25720901')].iloc[-1]
+    map_209_dt_utc = map_209["Datetime"].strftime("%Y-%m-%d %H:%M:%S")
+    update_projection_str_069 = f'SN0209, {map_209_dt_utc}, {map_209["lat"]}, {map_209["lon"]}, 500m'
+
+    return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks, update_str, update_projection_str_069, update_projection_str_069
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port
