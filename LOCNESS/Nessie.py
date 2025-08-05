@@ -315,7 +315,15 @@ def range_slider_marks(df, target_mark_count=10):
     timestamps = pd.date_range(start=t_start, end=t_max, freq=f'{interval_hours}h')
 
     # Convert to Unix timestamp and format labels
-    marks = {int(ts.timestamp()): ts.strftime('%m/%d %H:%M') for ts in timestamps}
+    # marks = {int(ts.timestamp()): ts.strftime('%m/%d %H:%M') for ts in timestamps}
+    marks = {
+        int(ts.timestamp()): {
+            'label': ts.strftime('%m/%d') + '\n' + ts.strftime('%H:%M'),
+            'style': {'fontSize': '12px', 'whiteSpace': 'pre'}
+        }
+        for ts in timestamps
+    }
+
     return marks
 
 gs = GulfStreamLoader()
@@ -404,7 +412,12 @@ app.layout = dbc.Container([
                         allowCross=False,
                         # tooltip={"placement": "bottom", "always_visible": False}
                     )
-                ], style={'padding': '20px 10px', 'margin-top': '10px'})
+                ], style={
+                    'padding': '10px 5px',
+                    'marginTop': '10px',
+                    'width': '100%',
+                    'boxSizing': 'border-box'
+                })
             ], style={'padding': '10px', 'backgroundColor': '#e3f2fd'})
         ], width=12)
     ]),
@@ -920,11 +933,11 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
                     thickness=15,         # width (since vertical)
                     tickvals=tickvals,
                     ticktext=ticktext,
-                    x=0.98,               # near the right edge of the plot
-                    y=0.5,                # center vertically
-                    xanchor='right',      # anchor the right side of the bar to x=0.98
-                    yanchor='middle',     # anchor the middle vertically
-                    # orientation='v'     # optional, vertical is default
+                    x=0.5,               # near the right edge of the plot, 0.98 v
+                    y=0.05,                # center vertically, 0.5 v
+                    xanchor='center',      # anchor the right side of the bar to right v
+                    yanchor='bottom',     # anchor the middle vertically, 
+                    orientation='h'     # optional, vertical is default
                     ),
                 cmin=cmin,
                 cmax=cmax,
@@ -1015,7 +1028,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             {
                 "below": 'traces',
                 "sourcetype": "raster",
-                "sourceattribution": "Esri, Garmin, GEBCO, NOAA NGDC, and other contributors",
+                # "sourceattribution": "Esri, Garmin, GEBCO, NOAA NGDC, and other contributors",
                 "source": [
                     "https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}"
                 ]
@@ -1248,7 +1261,7 @@ def update_range_slider(glider_overlay, n):
     map_209_dt_utc = map_209["Datetime"].strftime("%Y-%m-%d %H:%M:%S")
     update_projection_str_069 = f'SN069, {map_069_dt_utc}, {map_069["lat"]}, {map_069["lon"]}, 500m'
     update_projection_str_209 = f'SN209, {map_209_dt_utc}, {map_209["lat"]}, {map_209["lon"]}, 500m'
-    
+
     return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks, update_str, update_projection_str_069, update_projection_str_209
 
 if __name__ == '__main__':
