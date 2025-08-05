@@ -272,6 +272,33 @@ def make_depth_line_plot(
 
     fig.update_layout(coloraxis_colorbar=colorbar_config)
 
+    # fig.update_layout(
+    # legend=dict(
+    #     x=0.01,
+    #     y=0.99,
+    #     xanchor='left',
+    #     yanchor='top',
+    #     bgcolor='rgba(255,255,255,0.6)',  # semi-transparent white
+    #     bordercolor='black',
+    #     borderwidth=1,
+    #     traceorder='normal',
+    #     font=dict(size=10),
+    # )
+    # )
+    # fig.update_layout(
+    #     legend=dict(
+    #         orientation="h",       # horizontal layout
+    #         yanchor="bottom",      # anchor the legend box from its bottom
+    #         y=1.02,                # slightly above the plot area (1.0 is top edge)
+    #         xanchor="left",
+    #         x=0,
+    #         bgcolor='rgba(255,255,255,0.7)',  # optional background
+    #         bordercolor='black',
+    #         borderwidth=1,
+    #         font=dict(size=10)
+    #     )
+    # )
+
     return fig
 
 def range_slider_marks(df, target_mark_count=10):
@@ -438,7 +465,7 @@ app.layout = dbc.Container([
                     ])
                 ])
             ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        ], width=2),
+        ], xs=12, sm=12, md=6, lg=4, xl=2),
         # Assets column
         # dbc.Col([
         #     html.Div([
@@ -460,7 +487,7 @@ app.layout = dbc.Container([
         #             ])
         #         ])
         #     ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        # ], width=3),
+        # ], xs=12, md=2),
         # Map parameters column
         dbc.Col([
             html.Div([
@@ -482,7 +509,7 @@ app.layout = dbc.Container([
                     ])
                 ])
             ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        ], width=2),
+        ], xs=12, sm=12, md=6, lg=4, xl=2),
         # Map parameters column
         dbc.Col([
             html.Div([
@@ -500,7 +527,7 @@ app.layout = dbc.Container([
                     ])
                 ])
             ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        ], width=2),
+        ], xs=12, sm=12, md=6, lg=4, xl=2),
         # Cast Direction column
         dbc.Col([
             html.Div([
@@ -520,7 +547,7 @@ app.layout = dbc.Container([
                     ])
                 ])
             ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        ], width=2),
+        ], xs=12, sm=12, md=6, lg=4, xl=2),
         # Map Options column
         dbc.Col([
             html.Div([
@@ -540,7 +567,7 @@ app.layout = dbc.Container([
                     ])
                 ])
             ], style={'padding': '1vh', 'margin-top': '10px','margin-bottom': '10px'})
-        ], width=2),
+        ], xs=12, sm=12, md=6, lg=4, xl=2),
     ]),
     # Third Row - Plotting
     # (Removed main plots row)
@@ -554,14 +581,14 @@ app.layout = dbc.Container([
                             dcc.Graph(id='pHin-plot', style={'height': '70vh', 'width': '100%'})
                         ])
                     ])
-                ], width=6),
+                ], xs=12, sm=12, md=6, lg=6, xl=6),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             dcc.Graph(id='rho-plot', style={'height': '70vh', 'width': '100%'})
                         ])
                     ])
-                ], width=6),
+                ], xs=12, sm=12, md=6, lg=6, xl=6),
             ])
         ]),
         dcc.Tab(label='Temperature and Salinity', value='tab-1', children=[
@@ -572,14 +599,14 @@ app.layout = dbc.Container([
                             dcc.Graph(id='temp-plot', style={'height': '70vh', 'width': '100%'})
                         ])
                     ])
-                ], width=6),
+                ], xs=12, sm=12, md=6, lg=6, xl=6),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             dcc.Graph(id='salinity-plot', style={'height': '70vh', 'width': '100%'})
                         ])
                     ])
-                ], width=6),
+                ], xs=12, sm=12, md=6, lg=6, xl=6),
             ])
         ]),
         dcc.Tab(label='Oxygen & Chlorophyll', value='tab-oxy-chl', children=[
@@ -590,14 +617,14 @@ app.layout = dbc.Container([
                             dcc.Graph(id='doxy-plot', style={'height': '70vh', 'width': '100%'})
                         ])
                     ])
-                ], width=6),
+                ], xs=12, sm=12, md=6, lg=6, xl=6),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             dcc.Graph(id='chl-plot', style={'height': '70vh', 'width': '100%'})
                         ])
                     ])
-                ], width=6),
+                ], xs=12, sm=12, md=6, lg=6, xl=6),
             ])
         ]),
         dcc.Tab(label='pH Diagnostics', value='tab-2', children=[
@@ -608,21 +635,21 @@ app.layout = dbc.Container([
                             dcc.Graph(id='vrs-plot', style={'height': '40vh', 'width': '100%'})
                         ])
                     ])
-                ], width=4),
+                ], xs=12, sm=12, md=4, lg=4, xl=4),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             dcc.Graph(id='vrs-std-plot', style={'height': '40vh', 'width': '100%'})
                         ])
                     ])
-                ], width=4),
+                ], xs=12, sm=12, md=4, lg=4, xl=4),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             dcc.Graph(id='ik-plot', style={'height': '40vh', 'width': '100%'})
                         ])
                     ])
-                ], width=4),
+                ], xs=12, sm=12, md=4, lg=4, xl=4),
             ]),
             dbc.Row([
                 dbc.Col([
@@ -631,21 +658,21 @@ app.layout = dbc.Container([
                             dcc.Graph(id='vk-plot', style={'height': '40vh', 'width': '100%'})
                         ])
                     ])
-                ], width=4),
+                ], xs=12, sm=12, md=4, lg=4, xl=4),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             dcc.Graph(id='vk-std-plot', style={'height': '40vh', 'width': '100%'})
                         ])
                     ])
-                ], width=4),
+                ], xs=12, sm=12, md=4, lg=4, xl=4),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             dcc.Graph(id='ib-plot', style={'height': '40vh', 'width': '100%'})
                         ])
                     ])
-                ], width=4),
+                ], xs=12, sm=12, md=4, lg=4, xl=4),
             ]),
         ]),
         # --- Property Plot Tab ---
@@ -654,16 +681,16 @@ app.layout = dbc.Container([
                 dbc.Col([
                     html.Label('Select X-axis:'),
                     dcc.Dropdown(id='property-x-dropdown'),
-                ], width=3),
+                ], xs=12, sm=12, md=3, lg=3, xl=3),
                 dbc.Col([
                     html.Label('Select Y-axis:'),
                     dcc.Dropdown(id='property-y-dropdown'),
-                ], width=3),
+                ], xs=12, sm=12, md=3, lg=3, xl=3),
             ], className='mb-3'),
             dbc.Row([
                 dbc.Col([
                     dcc.Graph(id='property-plot', style={'height': '60vh', 'width': '100%'})
-                ], width=12)
+                ], xs=12, sm=12, md=12, lg=12, xl=12)
             ])
         ]),
     ]),
