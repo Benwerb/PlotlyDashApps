@@ -1246,9 +1246,10 @@ def update_range_slider(glider_overlay, n):
     map_069_dt_utc = map_069["Datetime"].strftime("%Y-%m-%d %H:%M:%S")
     map_209 = df_map[(df_map['Layer'] == 'WPT') & (df_map['Cruise'] == '25720901')].iloc[-1]
     map_209_dt_utc = map_209["Datetime"].strftime("%Y-%m-%d %H:%M:%S")
-    update_projection_str_069 = f'SN0209, {map_209_dt_utc}, {map_209["lat"]}, {map_209["lon"]}, 500m'
-
-    return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks, update_str, update_projection_str_069, update_projection_str_069
+    update_projection_str_069 = f'SN069, {map_069_dt_utc}, {map_069["lat"]}, {map_069["lon"]}, 500m'
+    update_projection_str_209 = f'SN209, {map_209_dt_utc}, {map_209["lat"]}, {map_209["lon"]}, 500m'
+    
+    return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks, update_str, update_projection_str_069, update_projection_str_209
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port
