@@ -578,14 +578,14 @@ app.layout = dbc.Container([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='pHin-plot', style={'height': '70vh', 'width': '100%'})
+                            dcc.Graph(id='pHin-plot', style={'height': '70vh', 'minHeight': '300px', 'width': '100%'})
                         ])
                     ])
                 ], xs=12, sm=12, md=6, lg=6, xl=6),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='rho-plot', style={'height': '70vh', 'width': '100%'})
+                            dcc.Graph(id='rho-plot', style={'height': '70vh', 'minHeight': '300px', 'width': '100%'})
                         ])
                     ])
                 ], xs=12, sm=12, md=6, lg=6, xl=6),
@@ -596,14 +596,14 @@ app.layout = dbc.Container([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='temp-plot', style={'height': '70vh', 'width': '100%'})
+                            dcc.Graph(id='temp-plot', style={'height': '70vh', 'minHeight': '300px', 'width': '100%'})
                         ])
                     ])
                 ], xs=12, sm=12, md=6, lg=6, xl=6),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='salinity-plot', style={'height': '70vh', 'width': '100%'})
+                            dcc.Graph(id='salinity-plot', style={'height': '70vh', 'minHeight': '300px', 'width': '100%'})
                         ])
                     ])
                 ], xs=12, sm=12, md=6, lg=6, xl=6),
@@ -614,14 +614,14 @@ app.layout = dbc.Container([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='doxy-plot', style={'height': '70vh', 'width': '100%'})
+                            dcc.Graph(id='doxy-plot', style={'height': '70vh', 'minHeight': '300px', 'width': '100%'})
                         ])
                     ])
                 ], xs=12, sm=12, md=6, lg=6, xl=6),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='chl-plot', style={'height': '70vh', 'width': '100%'})
+                            dcc.Graph(id='chl-plot', style={'height': '70vh', 'minHeight': '300px', 'width': '100%'})
                         ])
                     ])
                 ], xs=12, sm=12, md=6, lg=6, xl=6),
@@ -632,47 +632,47 @@ app.layout = dbc.Container([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='vrs-plot', style={'height': '40vh', 'width': '100%'})
+                            dcc.Graph(id='vrs-plot', style={'height': '40vh', 'minHeight': '300px', 'width': '100%'})
                         ])
                     ])
-                ], xs=12, sm=12, md=4, lg=4, xl=4),
+                ], xs=12, sm=12, md=12, lg=4, xl=4),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='vrs-std-plot', style={'height': '40vh', 'width': '100%'})
+                            dcc.Graph(id='vrs-std-plot', style={'height': '40vh', 'minHeight': '300px', 'width': '100%'})
                         ])
                     ])
-                ], xs=12, sm=12, md=4, lg=4, xl=4),
+                ], xs=12, sm=12, md=12, lg=4, xl=4),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='ik-plot', style={'height': '40vh', 'width': '100%'})
+                            dcc.Graph(id='ik-plot', style={'height': '40vh', 'minHeight': '300px', 'width': '100%'})
                         ])
                     ])
-                ], xs=12, sm=12, md=4, lg=4, xl=4),
+                ], xs=12, sm=12, md=12, lg=4, xl=4),
             ]),
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='vk-plot', style={'height': '40vh', 'width': '100%'})
+                            dcc.Graph(id='vk-plot', style={'height': '40vh', 'minHeight': '300px', 'width': '100%'})
                         ])
                     ])
-                ], xs=12, sm=12, md=4, lg=4, xl=4),
+                ], xs=12, sm=12, md=12, lg=4, xl=4),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='vk-std-plot', style={'height': '40vh', 'width': '100%'})
+                            dcc.Graph(id='vk-std-plot', style={'height': '40vh', 'minHeight': '300px', 'width': '100%'})
                         ])
                     ])
-                ], xs=12, sm=12, md=4, lg=4, xl=4),
+                ], xs=12, sm=12, md=12, lg=4, xl=4),
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            dcc.Graph(id='ib-plot', style={'height': '40vh', 'width': '100%'})
+                            dcc.Graph(id='ib-plot', style={'height': '40vh', 'minHeight': '300px', 'width': '100%'})
                         ])
                     ])
-                ], xs=12, sm=12, md=4, lg=4, xl=4),
+                ], xs=12, sm=12, md=12, lg=4, xl=4),
             ]),
         ]),
         # --- Property Plot Tab ---
@@ -689,7 +689,7 @@ app.layout = dbc.Container([
             ], className='mb-3'),
             dbc.Row([
                 dbc.Col([
-                    dcc.Graph(id='property-plot', style={'height': '60vh', 'width': '100%'})
+                    dcc.Graph(id='property-plot', style={'height': '60vh', 'minHeight': '300px', 'width': '100%'})
                 ], xs=12, sm=12, md=12, lg=12, xl=12)
             ])
         ]),
@@ -1164,10 +1164,10 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         ]
         # Get unique unixTimestamps and corresponding datetimes
         unix_vals = df_latest_filter['unixTimestamp'].values
-        datetimes = df_latest_filter['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S').values
+        datetimes = df_latest_filter['Datetime'].dt.strftime('%m/%d %H:%M').values
 
         # Choose 10 evenly spaced indices
-        n_ticks = 10
+        n_ticks = 5
         if len(unix_vals) > n_ticks:
             idxs = np.linspace(0, len(unix_vals) - 1, n_ticks, dtype=int)
             tickvals = unix_vals[idxs]
@@ -1187,14 +1187,16 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             template='plotly_white',
             color='unixTimestamp' if 'unixTimestamp' in df_latest_filter.columns else None,
         )
-        fig_property.update_yaxes(autorange="reversed")
+        if 'Depth[m]' in [property_x, property_y]:
+            fig_property.update_yaxes(autorange="reversed")
         fig_property.update_traces(marker=dict(size=6))
         if 'unixTimestamp' in df_latest_filter.columns:
             fig_property.update_layout(
                 coloraxis_colorbar=dict(
                     len=1,
                     tickvals=tickvals,
-                    ticktext=ticktext
+                    ticktext=ticktext,
+                    title='Datetime'
                 )
             )
     else:
