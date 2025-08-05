@@ -712,6 +712,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             (df_map['unixTimestamp'] >= range_value[0]) &
             (df_map['unixTimestamp'] <= range_value[1])
         ]
+    df_drifters = df_map_filtered[df_map_filtered['Platform'] == "Drifter"] # Drifter data only filtered by time
     # Preserve all WPT rows
     wpt_rows = df_map_filtered[df_map_filtered['Layer'] == 'WPT']
 
@@ -741,7 +742,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     df_SN069 = df_map_filtered[(df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] != 'WPT')]
     df_SN209_nxt = df_map_filtered[(df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] == 'WPT')]
     df_SN069_nxt = df_map_filtered[(df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] == 'WPT')]
-
+    
     # Handle empty DataFrame case
     is_map_df = isinstance(df_map_filtered, pd.DataFrame)
     is_latest_df = isinstance(df_latest_filter, pd.DataFrame)
@@ -955,6 +956,26 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             ),
             showlegend=False
         ))
+    if len(df_drifters) > 0:
+        drifter_hovertext = df_drifters['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_drifters['Cruise']
+        
+        map_fig.add_trace(go.Scattermap(
+                lat=df_drifters['lat'],
+                lon=df_drifters['lon'],
+                mode='markers',
+                name='Drifters',
+                hovertext=drifter_hovertext,
+                marker=dict(
+                    size=6,
+                    color=df_drifters['unixTimestamp'],
+                    colorscale=cscale,
+                    showscale=False,
+                    cmin=cmin,
+                    cmax=cmax,
+                ),
+                text=df_drifters['Cruise'],
+                textposition = "bottom right",
+            ))
     if 'overlay' in map_options:
         map_fig.add_trace(go.Scattermap(
         lat=GulfStreamBounds['Lat'],
