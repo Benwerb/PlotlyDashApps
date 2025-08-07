@@ -782,7 +782,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     df_SN069 = df_map_filtered[(df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] != 'WPT')]
     df_SN209_nxt = df_map_filtered[(df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] == 'WPT')]
     df_SN069_nxt = df_map_filtered[(df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] == 'WPT')]
-    
+    #  Weird issue with wpt when range slider is adjusted
     # Handle empty DataFrame case
     is_map_df = isinstance(df_map_filtered, pd.DataFrame)
     is_latest_df = isinstance(df_latest_filter, pd.DataFrame)
@@ -844,8 +844,8 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         unix_vals = df_SN069['unixTimestamp'].values
         datetimes = df_SN069['Datetime'].dt.strftime('%m/%d %H:%M').values
 
-        # Choose 10 evenly spaced indices
-        n_ticks = 10
+        # Choose 5 evenly spaced indices
+        n_ticks = 5
         if len(unix_vals) > n_ticks:
             idxs = np.linspace(0, len(unix_vals) - 1, n_ticks, dtype=int)
             tickvals = unix_vals[idxs]
@@ -1116,10 +1116,11 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             x="Salinity[pss]",
             title="Salinity[pss] vs. Depth"
         )
+        # Changed to Sigma!!!!!!!!!
         scatter_fig_chl = make_depth_line_plot(
             df_latest_filter,
-            x="Chl_a[mg/m^3]",
-            title="Chl_a[mg/m^3] vs. Depth"
+            x="Sigma_theta[kg/m^3]",
+            title="Sigma_theta[kg/m^3] vs. Depth"
         )
         scatter_fig_rho = make_depth_line_plot(
             df_latest_filter,
@@ -1276,7 +1277,7 @@ def update_range_slider(glider_overlay, n):
     unix_min = df_map["unixTimestamp"].min()
     unix_max = df_map["unixTimestamp"].max()
     unix_max_minus_12hrs = unix_max - 60*60*12
-    marks = range_slider_marks(df_map, 20) # Need to fix the marks
+    marks = range_slider_marks(df_map, 10) # Need to fix the marks
 
     # MAKE THIS ALL A TABLE NOT STRINGS
     datetime_max = df_map[df_map['Layer'] != 'WPT']["Datetime"].max() # Filter out WPT rows because they are ahead of time
