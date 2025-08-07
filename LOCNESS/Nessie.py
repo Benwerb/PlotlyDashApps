@@ -199,7 +199,7 @@ def make_depth_scatter_plot(
 
 def make_depth_line_plot(
     df, x, y="Depth[m]", title=None,
-    color="Station", symbol="Cruise",
+    color="Datetime",
     labels=None,
     colorbar_title=None,
     colorbar_orientation='v'
@@ -236,9 +236,11 @@ def make_depth_line_plot(
     if title is None:
         title = f"{x} vs. {y}"
     if labels is None:
-        labels = {x: x, y: y, color: color, symbol: symbol}
+        labels = {x: x, y: y, color: color}
     if colorbar_title is None:
         colorbar_title = color
+        df = df.sort_values(by=[color, 'Depth[m]'])
+        df['Datetime'] = df["Datetime"].dt.strftime("%m/%d %H:%M")
     # Get unique values and assign colors
     unique_vals = df[color].unique()
     num_colors = len(unique_vals)
@@ -609,7 +611,7 @@ app.layout = dbc.Container([
                 ], xs=12, sm=12, md=6, lg=6, xl=6),
             ])
         ]),
-        dcc.Tab(label='Oxygen & Chlorophyll', value='tab-oxy-chl', children=[
+        dcc.Tab(label='Oxygen & Sigma Theta', value='tab-oxy-chl', children=[
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
