@@ -366,7 +366,7 @@ server = app.server # Required for Gunicorn
 
 
 # loader = GliderDataLoader(filenames=['25420901RT.txt', '25520301RT.txt', '25706901RT.txt'])
-loader = GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt'])
+loader = GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt']) # ,'25821001RT.txt'
 # Load the most recent file (automatically done if no filename provided)
 df_latest = loader.load_data()
 map_loader = MapDataLoader()
@@ -781,8 +781,10 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     # Dataframes for map plot
     df_ship = df_map_filtered[df_map_filtered['Cruise'] == "RV Connecticut"]
     df_SN209 = df_map_filtered[(df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] != 'WPT')]
+    df_SN210 = df_map_filtered[(df_map_filtered['Cruise'] == "25821001") & (df_map_filtered['Layer'] != 'WPT')]
     df_SN069 = df_map_filtered[(df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] != 'WPT')]
     df_SN209_nxt = df_map_filtered[(df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] == 'WPT')]
+    df_SN210_nxt = df_map_filtered[(df_map_filtered['Cruise'] == "25821001") & (df_map_filtered['Layer'] == 'WPT')]
     df_SN069_nxt = df_map_filtered[(df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] == 'WPT')]
     #  Weird issue with wpt when range slider is adjusted
     # Handle empty DataFrame case
@@ -815,6 +817,17 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         last_glider_lon_SN209 = []
         next_glider_lat_SN209 = []
         next_glider_lon_SN209 = []
+    # Last Glider Location SN210
+    if len(df_SN210) > 0:
+        last_glider_lat_SN210 = np.array(df_SN210['lat'])[-1]
+        last_glider_lon_SN210 = np.array(df_SN210['lon'])[-1]
+        next_glider_lat_SN210 = np.array(df_SN210_nxt['lat'])[-1]
+        next_glider_lon_SN210 = np.array(df_SN210_nxt['lon'])[-1]
+    else:
+        last_glider_lat_SN210 = []
+        last_glider_lat_SN210 = []
+        last_glider_lat_SN210 = []
+        last_glider_lat_SN210 = []
     # Last Glider Location SN069
     if len(df_SN069) > 0:
         last_glider_lat_SN069 = np.array(df_SN069['lat'])[-1]
@@ -933,6 +946,53 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             mode='markers',
             name='SN209 Last Location',
             hovertext=sn209_hovertext_last,
+            marker=dict(
+                size=10,
+                symbol='airport',
+                showscale=False,
+            ),
+            showlegend=False
+        ))
+    # Set hovertext for SN210 based on selected parameter
+    if len(df_SN210) > 0:
+        sn210_hovertext = df_SN210['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN210[selected_parameter]
+        sn210_hovertext_proj = df_SN210_nxt['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN210_nxt[selected_parameter]
+        sn210_hovertext_last = np.array(sn210_hovertext)[-1]
+        sn210_hovertext_nxt = np.array(sn210_hovertext_proj)[-1]
+        map_fig.add_trace(go.Scattermap(
+        lat=df_SN210['lat'],
+        lon=df_SN210['lon'],
+        mode='markers',
+        name='SN210',
+        hovertext=sn210_hovertext,
+        marker=dict(
+            size=10, 
+            color=df_SN210[selected_parameter],
+            colorscale=cscale,
+            showscale=False,
+            cmin=cmin,
+            cmax=cmax,
+        ),
+        ))
+        map_fig.add_trace(go.Scattermap(
+        lat=[next_glider_lat_SN210],
+        lon=[next_glider_lon_SN210],
+        mode='markers',
+        name='SN210 Next Location',
+        hovertext=sn210_hovertext_nxt,
+        marker=dict(
+            size=15,
+            symbol='swimming',
+            showscale=False,
+        ),
+        showlegend=False
+        ))
+        map_fig.add_trace(go.Scattermap(
+            lat=[last_glider_lat_SN210],
+            lon=[last_glider_lon_SN210],
+            mode='markers',
+            name='SN210 Last Location',
+            hovertext=sn210_hovertext_last,
             marker=dict(
                 size=10,
                 symbol='airport',
