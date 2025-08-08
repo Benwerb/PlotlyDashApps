@@ -56,9 +56,12 @@ class GliderDataLoader:
 
         for fname in self.file_list:
             file_url = self.folder_url + fname
-            file_response = requests.get(file_url)
-            file_content = StringIO(file_response.text)
-            df = pd.read_csv(file_content, delimiter="\t", skiprows=6)
+            try:
+                file_response = requests.get(file_url)
+                file_content = StringIO(file_response.text)
+                df = pd.read_csv(file_content, delimiter="\t", skiprows=6)
+            except Exception as e:
+                continue
 
             # Clean
             df.columns = df.columns.str.replace('Â', '', regex=False)
