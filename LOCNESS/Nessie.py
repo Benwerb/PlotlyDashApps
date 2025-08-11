@@ -239,7 +239,8 @@ def make_depth_line_plot(
         labels = {x: x, y: y, color: color}
     if colorbar_title is None:
         colorbar_title = color
-        df = df.sort_values(by=[color, 'Depth[m]'])
+        # df = df.sort_values(by=[color, 'DIVEDIR', 'Depth[m]']) # add divedir
+        df = df.sort_values(by=[color, 'Depth[m]']) # add divedir
         df['Datetime'] = df["Datetime"].dt.strftime("%m/%d %H:%M")
     # Get unique values and assign colors
     unique_vals = df[color].unique()
@@ -788,6 +789,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         df_latest_filter = df_latest_filter[df_latest_filter["DIVEDIR"] == -1]
     # Dataframes for map plot
     df_ship = df_map_filtered[df_map_filtered['Cruise'] == "RV Connecticut"]
+    df_LRAUV = df_map_filtered[df_map_filtered['Platform'] == "LRAUV"]
     df_SN209 = df_map_filtered[(df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] != 'WPT')]
     df_SN210 = df_map_filtered[(df_map_filtered['Cruise'] == "25821001") & (df_map_filtered['Layer'] != 'WPT')]
     df_SN069 = df_map_filtered[(df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] != 'WPT')]
@@ -813,6 +815,13 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     else:
         last_ship_lat = np.array(df_map_filtered['lat'])[-1]
         last_ship_lon = np.array(df_map_filtered['lon'])[-1]
+
+    if len(df_LRAUV) > 0:
+        last_LRAUV_lat = np.array(df_LRAUV['lat'])[-1]
+        last_LRAUV_lon = np.array(df_LRAUV['lon'])[-1]
+    else:
+        last_LRAUV_lat = []
+        last_LRAUV_lon = []
 
     # Last Glider Location SN209
     if len(df_SN209) > 0:
@@ -907,8 +916,41 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             name='RV Connecticut Last Location',
             hovertext=ship_hovertext,
             marker=dict(
-                size=20,
+                size=15,
                 symbol='ferry',
+                showscale=False,
+            ),
+            showlegend=False
+        ))
+
+    # Set hovertext based on selected parameter
+    if len(df_LRAUV) > 0:
+        LRAUV_hovertext = df_LRAUV['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_LRAUV[selected_parameter]
+        LRAUV_hovertext_last = np.array(LRAUV_hovertext)[-1]
+        map_fig.add_trace(go.Scattermap(
+                lat=df_LRAUV['lat'],
+                lon=df_LRAUV['lon'],
+                mode='markers',
+                name='LRAUV',
+                hovertext=LRAUV_hovertext,
+                marker=dict(
+                    size=10,
+                    color=df_LRAUV[selected_parameter],
+                    colorscale=cscale,
+                    showscale=False,
+                    cmin=cmin,
+                    cmax=cmax,
+                ),
+            ))
+        map_fig.add_trace(go.Scattermap(
+            lat=[last_LRAUV_lat],
+            lon=[last_LRAUV_lon],
+            mode='markers',
+            name='LRAUV Last Location',
+            hovertext=LRAUV_hovertext_last,
+            marker=dict(
+                size=10,
+                symbol='heliport',
                 showscale=False,
             ),
             showlegend=False
