@@ -568,7 +568,7 @@ app.layout = dbc.Container([
                                     {'label': 'Overlay Glider Grid', 'value': 'glider_grid'},
                                     {'label': 'Overlay Stellwagen Bank MPA', 'value': 'mpa'},
                                     {'label': 'Overlay gomofs tracks', 'value': 'gomofs'},
-                                    {'label': 'Overlay doppio', 'value': 'doppio'}
+                                    {'label': 'Overlay doppio tracks', 'value': 'doppio'}
                                     ],
                                 value=[],
                                 labelStyle={'display': 'block'}
@@ -1138,7 +1138,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             lat=df_doppio['lat'],
             lon=df_doppio['lon'],
             mode='lines+markers',
-            name='gomofs tracks',
+            name='doppio tracks',
             line=dict(width=2, color='orange'),
             hovertext = doppioshovertext,
             textposition = "bottom right",
