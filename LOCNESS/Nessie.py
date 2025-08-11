@@ -842,9 +842,9 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         next_glider_lon_SN210 = np.array(df_SN210_nxt['lon'])[-1]
     else:
         last_glider_lat_SN210 = []
-        last_glider_lat_SN210 = []
-        last_glider_lat_SN210 = []
-        last_glider_lat_SN210 = []
+        last_glider_lon_SN210 = []
+        next_glider_lat_SN210 = []
+        next_glider_lon_SN210 = []
     # Last Glider Location SN069
     if len(df_SN069) > 0:
         last_glider_lat_SN069 = np.array(df_SN069['lat'])[-1]
@@ -1436,6 +1436,4 @@ def update_range_slider(glider_overlay, n):
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port
-    app.run(host="0.0.0.0", port=str(port), debug=True)
-    app.run(host="0.0.0.0", port=str(port), debug=True)
     app.run(host="0.0.0.0", port=str(port), debug=True)
