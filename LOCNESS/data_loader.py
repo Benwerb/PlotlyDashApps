@@ -322,3 +322,115 @@ class MPADataLoader:
         df.columns = df.columns.str.replace('Â', '', regex=False)
         
         return df
+    
+class gomofsdataloader:
+    def __init__(self, filenames=None):
+        """
+        Initialize DataLoader. Always fetches availabledata.txt files.
+
+        Parameters:
+            filenames (str or list of str, optional): Files to load. If None, defaults to most recent.
+        """
+        self.folder_url = "https://www3.mbari.org/lobo/Data/GliderVizData/"
+        self.available_files = self._get_available_files()
+
+        if not self.available_files:
+            raise FileNotFoundError("gomofs.txt files found at the specified URL.")
+
+        if filenames is None:
+            self.file_list = [self.available_files[-1]]  # default to most recent
+        elif isinstance(filenames, str):
+            self.file_list = [filenames]
+        else:
+            self.file_list = filenames
+
+    def _get_available_files(self):
+        """Scrape and return sorted list of available RT.txt files from the folder."""
+        response = requests.get(self.folder_url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        files = [
+            os.path.basename(str(a['href']))
+            for a in soup.find_all('a', href=True)
+            if isinstance(a, Tag) and 'gomofs' in str(a['href'])
+        ]
+        return sorted(files)
+
+    def get_available_files(self):
+        """Public method to get list of available files."""
+        return self.available_files
+
+    def get_latest_file(self):
+        """Return the most recent available sensor-data.txt file."""
+        return self.available_files[-1]
+
+    def load_data(self):
+        """
+        Load and clean all initialized files.
+
+        Returns:
+            A single concatenated DataFrame from all files.
+        """
+        file_url = self.folder_url + self.file_list[0]
+        file_response = requests.get(file_url)
+        file_content = StringIO(file_response.text)
+        df = pd.read_csv(file_content, delimiter=",", dtype={'trajectory': 'float64', 'obs': 'float64' ,'lat': 'float64', 'lon': 'float64', 'z': 'float64'}, parse_dates=['time'])
+        # Clean
+        df.columns = df.columns.str.replace('Â', '', regex=False)
+        
+        return df
+    
+class doppiodataloader:
+    def __init__(self, filenames=None):
+        """
+        Initialize DataLoader. Always fetches availabledata.txt files.
+
+        Parameters:
+            filenames (str or list of str, optional): Files to load. If None, defaults to most recent.
+        """
+        self.folder_url = "https://www3.mbari.org/lobo/Data/GliderVizData/"
+        self.available_files = self._get_available_files()
+
+        if not self.available_files:
+            raise FileNotFoundError("gomofs.txt files found at the specified URL.")
+
+        if filenames is None:
+            self.file_list = [self.available_files[-1]]  # default to most recent
+        elif isinstance(filenames, str):
+            self.file_list = [filenames]
+        else:
+            self.file_list = filenames
+
+    def _get_available_files(self):
+        """Scrape and return sorted list of available RT.txt files from the folder."""
+        response = requests.get(self.folder_url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        files = [
+            os.path.basename(str(a['href']))
+            for a in soup.find_all('a', href=True)
+            if isinstance(a, Tag) and 'doppio' in str(a['href'])
+        ]
+        return sorted(files)
+
+    def get_available_files(self):
+        """Public method to get list of available files."""
+        return self.available_files
+
+    def get_latest_file(self):
+        """Return the most recent available sensor-data.txt file."""
+        return self.available_files[-1]
+
+    def load_data(self):
+        """
+        Load and clean all initialized files.
+
+        Returns:
+            A single concatenated DataFrame from all files.
+        """
+        file_url = self.folder_url + self.file_list[0]
+        file_response = requests.get(file_url)
+        file_content = StringIO(file_response.text)
+        df = pd.read_csv(file_content, delimiter=",", dtype={'trajectory': 'float64', 'obs': 'float64' ,'lat': 'float64', 'lon': 'float64', 'z': 'float64'}, parse_dates=['time'])
+        # Clean
+        df.columns = df.columns.str.replace('Â', '', regex=False)
+        
+        return df

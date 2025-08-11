@@ -9,7 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 from io import StringIO
 import re
-from data_loader import GliderDataLoader, GulfStreamLoader, MapDataLoader, GliderGridDataLoader, MPADataLoader
+from data_loader import GliderDataLoader, GulfStreamLoader, MapDataLoader, GliderGridDataLoader, MPADataLoader, gomofsdataloader, doppiodataloader
 import datetime as dt
 from typing import cast, List, Dict, Any
 import pytz
@@ -244,7 +244,12 @@ def make_depth_line_plot(
     # Get unique values and assign colors
     unique_vals = df[color].unique()
     num_colors = len(unique_vals)
-    viridis_colors = px.colors.sample_colorscale("Cividis", [i / (num_colors - 1) for i in range(num_colors)])
+    # viridis_colors = px.colors.sample_colorscale("Cividis", [i / (num_colors - 1) for i in range(num_colors)])
+    if num_colors == 1:
+        viridis_colors = px.colors.sample_colorscale("Cividis", 0.5)  # Just one mid-scale color
+
+    else:
+        viridis_colors = px.colors.sample_colorscale("Cividis", [i / (num_colors - 1) for i in range(num_colors)])
     fig = px.line(
         df,
         x=x,
@@ -561,7 +566,9 @@ app.layout = dbc.Container([
                                 options=[
                                     {'label': 'Overlay Gulf Stream', 'value': 'overlay'},
                                     {'label': 'Overlay Glider Grid', 'value': 'glider_grid'},
-                                    {'label': 'Overlay Stellwagen Bank MPA', 'value': 'mpa'}
+                                    {'label': 'Overlay Stellwagen Bank MPA', 'value': 'mpa'},
+                                    {'label': 'Overlay gomofs tracks', 'value': 'gomofs'},
+                                    {'label': 'Overlay doppio', 'value': 'doppio'}
                                     ],
                                 value=[],
                                 labelStyle={'display': 'block'}
@@ -741,6 +748,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     # load mpa data
     mpa_loader = MPADataLoader()
     df_mpa = mpa_loader.load_data()
+    # load gomofs
     # Filter by date range
     if range_value[0] == range_value[1]:
         df_latest_filter = df_latest
@@ -1107,6 +1115,32 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             name='Stellwagen Bank MPA',
             line=dict(width=4, color='red'),
             text = 'Stellwagen Bank MPA',
+            textposition = "bottom right",
+        ))
+    if 'gomofs' in map_options:
+        gomofs_loader = gomofsdataloader()
+        df_gomofs = gomofs_loader.load_data()
+        gomofshovertext = df_gomofs['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        map_fig.add_trace(go.Scattermap(
+            lat=df_gomofs['lat'],
+            lon=df_gomofs['lon'],
+            mode='lines+markers',
+            name='gomofs tracks',
+            line=dict(width=2, color='red'),
+            hovertext = gomofshovertext,
+            textposition = "bottom right",
+        ))
+    if 'doppio' in map_options:
+        doppio_loader = doppiodataloader()
+        df_doppio = doppio_loader.load_data()
+        doppioshovertext = df_doppio['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        map_fig.add_trace(go.Scattermap(
+            lat=df_doppio['lat'],
+            lon=df_doppio['lon'],
+            mode='lines+markers',
+            name='gomofs tracks',
+            line=dict(width=2, color='orange'),
+            hovertext = doppioshovertext,
             textposition = "bottom right",
         ))
 
