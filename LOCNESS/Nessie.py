@@ -13,6 +13,7 @@ from data_loader import GliderDataLoader, GulfStreamLoader, MapDataLoader, Glide
 import datetime as dt
 from typing import cast, List, Dict, Any
 import pytz
+from plotly.validator_cache import ValidatorCache
 
 def get_first_10_pH_average(df_latest):
     df_MLD_average = df_latest.drop_duplicates(subset=['Station', 'Cruise'], keep='first').copy()
@@ -401,22 +402,27 @@ app.layout = dbc.Container([
             html.P(
                 id='update-text',
                 className='text-muted text-start',
-                style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}
+                style={'fontFamily': 'Times New Roman', 'marginBottom': '10px', 'fontSize': '15px', 'color': '#2c3e50'}
             ),
             html.P(
                 'GliderID, Next Surface Time (ET), lat, lon, +/- distance [m]',
                 className='text-muted text-start',
-                style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}
+                style={'fontFamily': 'Times New Roman', 'marginBottom': '10px', 'fontSize': '16px', 'fontWeight': 'bold', 'color': '#34495e'}
             ),
             html.P(
                 id='update-projection-text-069',
                 className='text-muted text-start',
-                style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}
+                style={'fontFamily': 'Times New Roman', 'marginBottom': '10px', 'fontSize': '15px', 'color': '#7f8c8d', 'fontStyle': 'bold'}
             ),
             html.P(
                 id='update-projection-text-209',
                 className='text-muted text-start',
-                style={'fontFamily': 'Segoe UI, sans-serif', 'marginBottom': '20px'}
+                style={'fontFamily': 'Times New Roman', 'marginBottom': '10px', 'fontSize': '15px', 'color': '#7f8c8d', 'fontStyle': 'bold'}
+            ),
+            html.P(
+                id='update-projection-text-210',
+                className='text-muted text-start',
+                style={'fontFamily': 'Times New Roman', 'marginBottom': '10px', 'fontSize': '15px', 'color': '#7f8c8d', 'fontStyle': 'bold'}
             ),
         ], width=12)
     ]),
@@ -1399,7 +1405,8 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         Output('RangeSlider', 'marks'),
         Output('update-text', 'children'),
         Output('update-projection-text-069', 'children'),
-        Output('update-projection-text-209', 'children')
+        Output('update-projection-text-209', 'children'),
+        Output('update-projection-text-210', 'children')
     ],
     [
         Input('glider_overlay_checklist', 'value'),
@@ -1429,10 +1436,14 @@ def update_range_slider(glider_overlay, n):
     map_209 = df_map[(df_map['Layer'] == 'WPT') & (df_map['Cruise'] == '25720901')].iloc[-1]
     map_209_dt_utc = map_209["Datetime"]
     map_209_dt_ET = map_209_dt_utc.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
-    update_projection_str_069 = f'SN069, {map_069_dt_ET} +/- 5 min, {map_069["lat"]}, {map_069["lon"]}, +/- 500m'
-    update_projection_str_209 = f'SN209, {map_209_dt_ET} +/- 5 min, {map_209["lat"]}, {map_209["lon"]}, +/- 500m'
+    map_210 = df_map[(df_map['Layer'] == 'WPT') & (df_map['Cruise'] == '25821001')].iloc[-1]
+    map_210_dt_utc = map_210["Datetime"]
+    map_210_dt_ET = map_210_dt_utc.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
+    update_projection_str_069 = f'SN069, {map_069_dt_ET} +/- 5 min, {map_069["lat"]:.4f}, {map_069["lon"]:.4f}, +/- 500m'
+    update_projection_str_209 = f'SN209, {map_209_dt_ET} +/- 5 min, {map_209["lat"]:.4f}, {map_209["lon"]:.4f}, +/- 500m'
+    update_projection_str_210 = f'SN210, {map_210_dt_ET} +/- 5 min, {map_210["lat"]:.4f}, {map_210["lon"]:.4f}, +/- 500m'
 
-    return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks, update_str, update_projection_str_069, update_projection_str_209
+    return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks, update_str, update_projection_str_069, update_projection_str_209, update_projection_str_210
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port
