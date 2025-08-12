@@ -351,7 +351,7 @@ class gomofsdataloader:
         files = [
             os.path.basename(str(a['href']))
             for a in soup.find_all('a', href=True)
-            if isinstance(a, Tag) and 'gomofs' in str(a['href'])
+            if isinstance(a, Tag) and 'current_gomofs.txt' in str(a['href'])
         ]
         return sorted(files)
 
@@ -407,7 +407,7 @@ class doppiodataloader:
         files = [
             os.path.basename(str(a['href']))
             for a in soup.find_all('a', href=True)
-            if isinstance(a, Tag) and 'doppio' in str(a['href'])
+            if isinstance(a, Tag) and 'current_doppio.txt' in str(a['href'])
         ]
         return sorted(files)
 
