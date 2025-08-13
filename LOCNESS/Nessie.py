@@ -373,7 +373,7 @@ server = app.server # Required for Gunicorn
 
 
 # loader = GliderDataLoader(filenames=['25420901RT.txt', '25520301RT.txt', '25706901RT.txt'])
-loader = GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt']) # ,'25821001RT.txt'
+loader = GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'])
 # Load the most recent file (automatically done if no filename provided)
 df_latest = loader.load_data()
 map_loader = MapDataLoader()
