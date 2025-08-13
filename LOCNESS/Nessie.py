@@ -872,7 +872,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         cscale = 'bluered'
     elif selected_parameter == 'rhodamine':
         cmin, cmax = 0, 100
-        cscale = 'jet'
+        cscale = 'Reds'
     else:
         cmin, cmax = None, None
         cscale = 'Cividis'
