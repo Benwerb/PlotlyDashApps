@@ -871,7 +871,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         cmin, cmax = 8, 8.2
         cscale = 'bluered'
     elif selected_parameter == 'rhodamine':
-        cmin, cmax = 0, 2
+        cmin, cmax = 0, 100
         cscale = 'jet'
     else:
         cmin, cmax = None, None
@@ -906,7 +906,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
                 name='RV Connecticut',
                 hovertext=ship_hovertext,
                 marker=dict(
-                    size=6,
+                    size=10,
                     color=df_ship[selected_parameter],
                     colorscale=cscale,
                     showscale=False,
