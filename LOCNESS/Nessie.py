@@ -571,6 +571,7 @@ app.layout = dbc.Container([
                         dcc.Checklist(
                                 id='map_options',
                                 options=[
+                                    {'label': 'Drifters', 'value': 'drifters'},
                                     {'label': 'Overlay Gulf Stream', 'value': 'overlay'},
                                     {'label': 'Overlay Glider Grid', 'value': 'glider_grid'},
                                     {'label': 'Overlay Stellwagen Bank MPA', 'value': 'mpa'},
@@ -871,6 +872,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         cmin, cmax = 8, 8.2
         cscale = 'bluered'
     elif selected_parameter == 'rhodamine':
+        # Default range for most traces
         cmin, cmax = 0, 100
         cscale = 'Reds'
     else:
@@ -909,8 +911,19 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
                     size=10,
                     color=df_ship[selected_parameter],
                     colorscale=cscale,
-                    showscale=False,
-                    colorbar=dict(len=0.6,tickvals=tickvals,ticktext=ticktext),
+                    showscale=True,
+                    colorbar=dict(
+                    len=0.6,              # length of colorbar
+                    thickness=15,         # width (since vertical)
+                    tickvals=tickvals,
+                    ticktext=ticktext,
+                    x=0.5,               # near the right edge of the plot, 0.98 v
+                    y=0.05,                # center vertically, 0.5 v
+                    xanchor='center',      # anchor the right side of the bar to right v
+                    yanchor='bottom',     # anchor the middle vertically, 
+                    orientation='h'     # optional, vertical is default
+                    ),
+                    # colorbar=dict(len=0.6,tickvals=tickvals,ticktext=ticktext),
                     cmin=cmin,
                     cmax=cmax,
                 ),
@@ -1062,6 +1075,12 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         sn069_hovertext_proj = df_SN069_nxt['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN069_nxt[selected_parameter]
         sn069_hovertext_last = np.array(sn069_hovertext)[-1]
         sn069_hovertext_nxt = np.array(sn069_hovertext_proj)[-1]
+        # For rhodamine, SN069 uses different range (0-15) while others use (0-100)
+        if selected_parameter == 'rhodamine':
+            sn069_cmin, sn069_cmax = 0, 15
+        else:
+            sn069_cmin, sn069_cmax = cmin, cmax
+            
         map_fig.add_trace(go.Scattermap(
             lat=df_SN069['lat'],
             lon=df_SN069['lon'],
@@ -1072,20 +1091,9 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
                 size=10, 
                 color=df_SN069[selected_parameter],
                 colorscale=cscale,  
-                showscale=True,
-                colorbar=dict(
-                    len=0.6,              # length of colorbar
-                    thickness=15,         # width (since vertical)
-                    tickvals=tickvals,
-                    ticktext=ticktext,
-                    x=0.5,               # near the right edge of the plot, 0.98 v
-                    y=0.05,                # center vertically, 0.5 v
-                    xanchor='center',      # anchor the right side of the bar to right v
-                    yanchor='bottom',     # anchor the middle vertically, 
-                    orientation='h'     # optional, vertical is default
-                    ),
-                cmin=cmin,
-                cmax=cmax,
+                showscale=False,
+                cmin=sn069_cmin,
+                cmax=sn069_cmax,
             ),
         ))      
         map_fig.add_trace(go.Scattermap(
@@ -1114,26 +1122,30 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             ),
             showlegend=False
         ))
-    if len(df_drifters) > 0:
-        drifter_hovertext = df_drifters['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_drifters['Cruise']
+    # Drifters
+    if len(df_drifters) > 0 and 'drifters' in map_options and selected_parameter == 'unixTimestamp':
+        for cruise in df_drifters['Cruise'].unique():
+            df_cruise = df_drifters[df_drifters['Cruise'] == cruise]
+            drifter_hovertext = df_cruise['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S')
+            
+            map_fig.add_trace(go.Scattermap(
+                    lat=df_cruise['lat'],  # Use df_cruise instead of df_drifters
+                    lon=df_cruise['lon'],  # Use df_cruise instead of df_drifters
+                    mode='markers',
+                    name=f'SPOT{cruise[-2:]}',
+                    hovertext=drifter_hovertext,
+                    marker=dict(
+                        size=8,
+                        color=df_cruise['unixTimestamp'],  # Use df_cruise instead of df_drifters
+                        colorscale=cscale,
+                        showscale=False,
+                        cmin=cmin,
+                        cmax=cmax,
+                    ),
+                    text=df_cruise['Cruise'],  # Use df_cruise instead of df_drifters
+                    textposition = "bottom right",
+                ))
         
-        map_fig.add_trace(go.Scattermap(
-                lat=df_drifters['lat'],
-                lon=df_drifters['lon'],
-                mode='markers',
-                name='Drifters',
-                hovertext=drifter_hovertext,
-                marker=dict(
-                    size=6,
-                    color=df_drifters['unixTimestamp'],
-                    colorscale=cscale,
-                    showscale=False,
-                    cmin=cmin,
-                    cmax=cmax,
-                ),
-                text=df_drifters['Cruise'],
-                textposition = "bottom right",
-            ))
     if 'overlay' in map_options:
         map_fig.add_trace(go.Scattermap(
         lat=GulfStreamBounds['Lat'],
@@ -1193,6 +1205,8 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         ))
 
     # map_fig.update_layout(map = {'zoom': 8, 'style': 'satellite', 'center': {'lat': last_ship_lat, 'lon': last_ship_lon}})
+    # map_fig.update_traces(marker_symbol=1, selector=dict(name='SPOT01'))
+
     map_fig.update_layout(
         map_style="white-bg",
         map_layers=[
