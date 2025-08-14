@@ -873,7 +873,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         cscale = 'bluered'
     elif selected_parameter == 'rhodamine':
         # Default range for most traces
-        cmin, cmax = 0, 100
+        cmin, cmax = 0, 10
         cscale = 'Reds'
     else:
         cmin, cmax = None, None
