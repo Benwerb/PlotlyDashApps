@@ -10,10 +10,13 @@ from bs4 import BeautifulSoup
 from io import StringIO
 import re
 from data_loader import GliderDataLoader, GulfStreamLoader, MapDataLoader, GliderGridDataLoader, MPADataLoader, gomofsdataloader, doppiodataloader
+from nessie_interpolation_function import create_spatial_interpolation
 import datetime as dt
 from typing import cast, List, Dict, Any
 import pytz
 from plotly.validator_cache import ValidatorCache
+import numpy as np
+from scipy.interpolate import griddata
 
 def get_first_10_pH_average(df_latest):
     df_MLD_average = df_latest.drop_duplicates(subset=['Station', 'Cruise'], keep='first').copy()
@@ -710,6 +713,31 @@ app.layout = dbc.Container([
                 ], xs=12, sm=12, md=12, lg=12, xl=12)
             ])
         ]),
+        # --- Interpolation Map Tab ---
+        dcc.Tab(label='Interpolation Map', value='tab-interpolation', children=[
+            dbc.Row([
+                dbc.Col([
+                    html.Label('Select Parameter:'),
+                    dcc.Dropdown(id='interpolation-parameter-dropdown',options=[{'label': 'pHin', 'value': 'pHin'},
+                     {'label': 'rhodamine', 'value': 'rhodamine'}, {'label': 'temperature', 'value': 'temperature'},
+                      {'label': 'salinity', 'value': 'salinity'}], value='rhodamine'),
+                ], xs=12, sm=12, md=3, lg=3, xl=3),
+                dbc.Col([
+                    html.Label('Hours Back:'),
+                    dcc.Slider(id='interpolation-hours-back-slider', min=1, max=24, step=1, value=3),
+                ], xs=12, sm=12, md=3, lg=3, xl=3),
+                dbc.Col([
+                    html.Label('Select Platform:'),
+                    dcc.Dropdown(id='interpolation-platform-dropdown',options=[{'label': 'Glider', 'value': 'Glider'},
+                     {'label': 'Ship', 'value': 'Ship'}, {'label': 'LRAUV', 'value': 'LRAUV'}], value=['Glider','Ship','LRAUV'],multi=True),
+                ], xs=12, sm=12, md=3, lg=3, xl=3),
+            ], className='mb-3'),
+            dbc.Row([
+                dbc.Col([
+                    dcc.Graph(id='interpolation-map', figure=go.Figure(), style={'height': '60vh', 'minHeight': '300px', 'width': '100%'})
+                ], xs=12, sm=12, md=12, lg=12, xl=12)
+            ])
+        ]),
     ]),
 ], fluid=True, className='dashboard-container')
 
@@ -904,7 +932,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         map_fig.add_trace(go.Scattermap(
                 lat=df_ship['lat'],
                 lon=df_ship['lon'],
-                mode='markers',
+                mode='lines+markers',
                 name='RV Connecticut',
                 hovertext=ship_hovertext,
                 marker=dict(
@@ -1410,6 +1438,52 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
             go.Figure(), dropdown_options, dropdown_options
         )
+
+@app.callback(
+    Output('interpolation-map', 'figure'),
+    [Input('interpolation-parameter-dropdown', 'value'),
+     Input('interpolation-hours-back-slider', 'value'),
+     Input('interpolation-platform-dropdown', 'value')]
+)
+def update_interpolation(parameter, hours_back, platforms):
+    if not parameter or not platforms:
+        return go.Figure()
+    
+    try:
+        # Get your filtered dataframe
+        df_map = map_loader.load_data()
+        
+        if df_map.empty:
+            print("No data available for interpolation")
+            return go.Figure()
+        
+        # print(f"Creating interpolation for {parameter} with {hours_back} hours back, platforms: {platforms}, layer: {layer}, method: {method}")
+        
+        # Create interpolation
+        fig, metadata = create_spatial_interpolation(
+            df=df_map,
+            parameter=parameter,
+            hours_back=hours_back,
+            platform_filter=platforms,
+            layer_filter='MLD',
+            grid_resolution=80,
+            method='linear',
+            nan_filter_parameters=[parameter]
+        )
+        
+        if fig is not None:
+            # print(f"Interpolation successful: {metadata}")
+            return fig
+        else:
+            # print("Interpolation failed - no figure returned")
+            return go.Figure()
+            
+    except Exception as e:
+        # print(f"Error in interpolation callback: {e}")
+        import traceback
+        traceback.print_exc()
+        return go.Figure()
+
 
 @app.callback(
     [
