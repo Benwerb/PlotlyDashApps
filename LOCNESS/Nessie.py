@@ -244,7 +244,9 @@ def make_depth_line_plot(
     if colorbar_title is None:
         colorbar_title = color
         # df = df.sort_values(by=[color, 'DIVEDIR', 'Depth[m]']) # add divedir
-        df = df.sort_values(by=[color, 'Depth[m]']) # add divedir
+        # df = df.sort_values(by=[color, 'DIVEDIR' ,'Depth[m]']) # add divedir
+        df = df.sort_values(by=['Station', 'DIVEDIR']) # This works, except connects the surface lines
+        
         df['Datetime'] = df["Datetime"].dt.strftime("%m/%d %H:%M")
     # Get unique values and assign colors
     unique_vals = df[color].unique()
@@ -263,7 +265,8 @@ def make_depth_line_plot(
         labels=labels,
         title=title,
         markers=True,
-        color_discrete_sequence=viridis_colors
+        color_discrete_sequence=viridis_colors,
+        line_group=color # Each color is a different line
     )
 
     # Reverse y-axis (for depth plots)
@@ -928,7 +931,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     # Set hovertext based on selected parameter
     if len(df_ship) > 0:
         ship_hovertext = df_ship['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_ship[selected_parameter]
-        
+        ship_hovertext_last = np.array(ship_hovertext)[-1]
         map_fig.add_trace(go.Scattermap(
                 lat=df_ship['lat'],
                 lon=df_ship['lon'],
@@ -961,7 +964,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             lon=[last_ship_lon],
             mode='markers',
             name='RV Connecticut Last Location',
-            hovertext=ship_hovertext,
+            hovertext=ship_hovertext_last,
             marker=dict(
                 size=15,
                 symbol='ferry',
