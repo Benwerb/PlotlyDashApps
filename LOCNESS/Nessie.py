@@ -17,6 +17,8 @@ from typing import cast, List, Dict, Any
 # from plotly.validator_cache import ValidatorCache
 # from scipy.interpolate import griddata
 import time
+import psutil
+import os
 
 class CachedDataLoader:
     def __init__(self, loader, cache_duration=300):  # 5 minutes
@@ -39,8 +41,12 @@ class CachedDataLoader:
         return self.get_data()
 
 # Create cached versions
-cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt']))
+cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'], sample_rate=2))
 cached_map_loader = CachedDataLoader(MapDataLoader())
+cached_glider_grid_loader = CachedDataLoader(GliderGridDataLoader())
+cached_mpa_loader = CachedDataLoader(MPADataLoader())
+cached_gomofs_loader = CachedDataLoader(gomofsdataloader())
+cached_doppio_loader = CachedDataLoader(doppiodataloader())
 
 def get_first_10_pH_average(df_latest):
     df_MLD_average = df_latest.drop_duplicates(subset=['Station', 'Cruise'], keep='first').copy()
@@ -469,7 +475,7 @@ app.layout = dbc.Container([
                             id='map-plot',
                             style={'height': '70vh', 'width': '100%'}
                         ),
-                        dcc.Interval(id="interval-refresh", interval=60*1000*5, n_intervals=0)  # every 5 minutes
+                        dcc.Interval(id="interval-refresh", interval=60*1000*10, n_intervals=0)  # every 10 minutes
                     ])
                 ]),
                 # Range slider
@@ -802,43 +808,52 @@ app.layout = dbc.Container([
     ]
 )
 def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected_tab, range_value, selected_layer, selected_cast_direction, property_x, property_y):
-    # Load glider and filter by selected gliders
+    # Log memory at start of callback
+    log_memory_usage()
+    
+    # Use cached data
     df_latest = cached_loader.get_data()
-    df_latest = filter_glider_assets(df_latest, glider_overlay)
-    # Load map data
     df_map = cached_map_loader.get_data()
-    # load glider grid
-    glider_grid_loader = GliderGridDataLoader()
-    df_glider_grid = glider_grid_loader.load_data()
-    # load mpa data
-    mpa_loader = MPADataLoader()
-    df_mpa = mpa_loader.load_data()
-    # load gomofs
-    # Filter by date range
-    if range_value[0] == range_value[1]:
+    df_glider_grid = cached_glider_grid_loader.get_data()
+    df_mpa = cached_mpa_loader.get_data()
+    
+    # Filter glider assets (this is necessary)
+    df_latest = filter_glider_assets(df_latest, glider_overlay)
+    
+    # Log memory after data loading
+    log_memory_usage()
+    
+    # Use .loc instead of creating copies
+    if range_value[0] != range_value[1]:
+        # Create boolean masks instead of new DataFrames
+        time_mask = (df_latest['unixTimestamp'] >= range_value[0]) & \
+                   (df_latest['unixTimestamp'] <= range_value[1])
+        df_latest_filter = df_latest[time_mask]
+        
+        time_mask_map = (df_map['unixTimestamp'] >= range_value[0]) & \
+                       (df_map['unixTimestamp'] <= range_value[1])
+        df_map_filtered = df_map[time_mask_map]
+    else:
         df_latest_filter = df_latest
         df_map_filtered = df_map
-    else:
-        df_latest_filter = df_latest[
-            (df_latest['unixTimestamp'] >= range_value[0]) &
-            (df_latest['unixTimestamp'] <= range_value[1])
-        ]
-        df_map_filtered = df_map[
-            (df_map['unixTimestamp'] >= range_value[0]) &
-            (df_map['unixTimestamp'] <= range_value[1])
-        ]
-    df_drifters = df_map_filtered[df_map_filtered['Platform'] == "Drifter"] # Drifter data only filtered by time
-    # Preserve all WPT rows
-    wpt_rows = df_map_filtered[df_map_filtered['Layer'] == 'WPT']
-
-    # Filter by layers (only for non-WPT rows)
-    non_wpt_rows = df_map_filtered[df_map_filtered['Layer'] != 'WPT']
+    
+    # Use boolean masks instead of creating new DataFrames
+    drifter_mask = df_map_filtered['Platform'] == "Drifter"
+    wpt_mask = df_map_filtered['Layer'] == 'WPT'
+    non_wpt_mask = df_map_filtered['Layer'] != 'WPT'
+    
+    # Apply layer filter
     if selected_layer == 'MLD':
-        non_wpt_rows = non_wpt_rows[non_wpt_rows['Layer'] == 'MLD']
+        non_wpt_mask &= df_map_filtered['Layer'] == 'MLD'
     elif selected_layer == 'Surface':
-        non_wpt_rows = non_wpt_rows[non_wpt_rows['Layer'] == 'Surface']
-
-    # Recombine WPT and filtered rows
+        non_wpt_mask &= df_map_filtered['Layer'] == 'Surface'
+    
+    # Use masks directly instead of creating copies
+    df_drifters = df_map_filtered[drifter_mask]
+    wpt_rows = df_map_filtered[wpt_mask]
+    non_wpt_rows = df_map_filtered[non_wpt_mask]
+    
+    # Only create new DataFrame when absolutely necessary
     df_map_filtered = pd.concat([non_wpt_rows, wpt_rows], ignore_index=True)
     # Filter by cast direction
     if selected_cast_direction == 'Mean':
@@ -1531,6 +1546,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     ]
 )
 def update_range_slider(glider_overlay, n):
+    log_memory_usage()  # Add this line
     try:
         df_map = cached_map_loader.get_data()
         if df_map.empty:
@@ -1576,6 +1592,11 @@ def update_range_slider(glider_overlay, n):
         # Return safe defaults on any error - must return 8 values to match outputs
         print(f"Error in update_range_slider: {e}")
         return 0, 1, [0, 1], {0: "Error"}, f"Error: {str(e)}", "Error", "Error", "Error"
+
+def log_memory_usage():
+    process = psutil.Process(os.getpid())
+    memory_mb = process.memory_info().rss / 1024 / 1024
+    print(f"Memory usage: {memory_mb:.1f} MB")
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port

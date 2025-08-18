@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup, Tag
 import re
 
 class GliderDataLoader:
-    def __init__(self, filenames=None):
+    def __init__(self, filenames=None, sample_rate=None):
         """
         Initialize DataLoader. Always fetches available RT.txt files.
 
@@ -15,7 +15,7 @@ class GliderDataLoader:
         """
         self.folder_url = "https://www3.mbari.org/lobo/Data/GliderVizData/"
         self.available_files = self._get_available_files()
-
+        self.sample_rate = sample_rate
         if not self.available_files:
             raise FileNotFoundError("No RT.txt files found at the specified URL.")
 
@@ -108,7 +108,14 @@ class GliderDataLoader:
             for i, df in enumerate(dfs):
                 dfs[i] = df.reindex(columns=column_order)
 
-        return pd.concat(dfs, ignore_index=True)
+
+            # After loading all files, resample
+        if self.sample_rate is not None and self.sample_rate > 1:
+            df_combined = pd.concat(dfs, ignore_index=True)
+            df_resampled = df_combined.iloc[::self.sample_rate].copy()
+            return df_resampled
+        else:
+            return pd.concat(dfs, ignore_index=True)
 
 class GulfStreamLoader:
     def __init__(self):
