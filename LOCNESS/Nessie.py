@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import dash, Dash, html, dcc, callback, Output, Input
+from dash import dash, Dash, html, dcc, callback, Output, Input, State
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -1578,7 +1578,18 @@ def update_range_slider(glider_overlay, n):
                 glider_row = glider_data.iloc[-1]
                 dt_utc = glider_row["Datetime"]
                 dt_ET = dt_utc.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
-                return f'SN{cruise_id[-2:]}, {dt_ET} +/- 5 min, {glider_row["lat"]:.4f}, {glider_row["lon"]:.4f}, +/- 500m'
+                
+                # Fix the glider ID extraction
+                if cruise_id == '25706901':
+                    glider_id = 'SN069'
+                elif cruise_id == '25720901':
+                    glider_id = 'SN209'
+                elif cruise_id == '25821001':
+                    glider_id = 'SN210'
+                else:
+                    glider_id = f'SN{cruise_id[-4:-2]}'  # Fallback
+                    
+                return f'{glider_id}, {dt_ET} +/- 5 min, {glider_row["lat"]:.4f}, {glider_row["lon"]:.4f}, +/- 500m'
             except Exception as e:
                 return f"Error: {str(e)}"
         
