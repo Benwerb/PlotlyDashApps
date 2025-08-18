@@ -1,22 +1,46 @@
 import dash_bootstrap_components as dbc
-from dash import dash, Dash, html, dash_table, dcc, callback, Output, Input, State
+from dash import dash, Dash, html, dcc, callback, Output, Input
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import os
 import plotly.graph_objects as go
-import requests
-from bs4 import BeautifulSoup
-from io import StringIO
-import re
+# import requests
+# from bs4 import BeautifulSoup
+# from io import StringIO
+# import re
 from data_loader import GliderDataLoader, GulfStreamLoader, MapDataLoader, GliderGridDataLoader, MPADataLoader, gomofsdataloader, doppiodataloader
 # from nessie_interpolation_function import create_spatial_interpolation
-import datetime as dt
+# import datetime as dt
 from typing import cast, List, Dict, Any
-import pytz
-from plotly.validator_cache import ValidatorCache
-import numpy as np
+# import pytz
+# from plotly.validator_cache import ValidatorCache
 # from scipy.interpolate import griddata
+import time
+
+class CachedDataLoader:
+    def __init__(self, loader, cache_duration=300):  # 5 minutes
+        self.loader = loader
+        self.cache_duration = cache_duration
+        self._cached_data = None
+        self._last_load_time = 0
+    
+    def get_data(self):
+        current_time = time.time()
+        if (self._cached_data is None or 
+            current_time - self._last_load_time > self.cache_duration):
+            self._cached_data = self.loader.load_data()
+            self._last_load_time = current_time
+        return self._cached_data
+    
+    def force_refresh(self):
+        """Force a refresh of the cached data"""
+        self._cached_data = None
+        return self.get_data()
+
+# Create cached versions
+cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt']))
+cached_map_loader = CachedDataLoader(MapDataLoader())
 
 def get_first_10_pH_average(df_latest):
     df_MLD_average = df_latest.drop_duplicates(subset=['Station', 'Cruise'], keep='first').copy()
@@ -377,13 +401,15 @@ external_stylesheets = cast(List[str | Dict[str, Any]], [dbc.themes.FLATLY])
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server # Required for Gunicorn
 
-
+# non caching approach
 # loader = GliderDataLoader(filenames=['25420901RT.txt', '25520301RT.txt', '25706901RT.txt'])
-loader = GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'])
-# Load the most recent file (automatically done if no filename provided)
-df_latest = loader.load_data()
-map_loader = MapDataLoader()
-df_map = map_loader.load_data()
+# loader = GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'])
+# # Load the most recent file (automatically done if no filename provided)
+# df_latest = loader.load_data()
+# map_loader = MapDataLoader()
+# df_map = map_loader.load_data()
+df_latest = cached_loader.get_data()
+df_map = cached_map_loader.get_data()
 station_min, station_max = df_latest["Station"].min(), df_latest["Station"].max()
 date_min, date_max = df_latest["Date"].min(), df_latest["Date"].max() 
 unix_min, unix_max = df_latest["unixTimestamp"].min(), df_latest["unixTimestamp"].max() 
@@ -777,10 +803,10 @@ app.layout = dbc.Container([
 )
 def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected_tab, range_value, selected_layer, selected_cast_direction, property_x, property_y):
     # Load glider and filter by selected gliders
-    df_latest = loader.load_data()
+    df_latest = cached_loader.get_data()
     df_latest = filter_glider_assets(df_latest, glider_overlay)
     # Load map data
-    df_map = map_loader.load_data()
+    df_map = cached_map_loader.get_data()
     # load glider grid
     glider_grid_loader = GliderGridDataLoader()
     df_glider_grid = glider_grid_loader.load_data()
@@ -1506,7 +1532,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
 )
 def update_range_slider(glider_overlay, n):
     try:
-        df_map = map_loader.load_data()
+        df_map = cached_map_loader.get_data()
         if df_map.empty:
             # Return safe defaults if no data - must return 8 values to match outputs
             return 0, 1, [0, 1], {0: "No data"}, "No data available", "No data", "No data", "No data"
