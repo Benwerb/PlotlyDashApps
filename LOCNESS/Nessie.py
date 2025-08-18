@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import dash, Dash, html, dcc, callback, Output, Input, State
+from dash import Dash, html, dcc, callback, Output, Input, State, no_update
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -884,7 +884,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         return (
             blank_fig, blank_fig, blank_fig,
             blank_fig, blank_fig, blank_fig,
-            blank_fig, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            blank_fig, no_update, no_update, no_update, no_update, no_update, no_update,
             go.Figure(), [], []
         )
     # Set map center
@@ -1436,50 +1436,50 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     # Tab 1: update temp, salinity; Tab 2: update vrs, vrs_std, vk, vk_std, ik, ib; Tab-phin-rho: update pHin and Rho; Tab-oxy-chl: update O2 and Chl; Tab-property: update property plot
     if selected_tab == 'tab-phin-rho':
         return (
-            map_fig, scatter_fig_pHin, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update,
+            map_fig, scatter_fig_pHin, no_update,
+            no_update, no_update, no_update,
             scatter_fig_rho,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            no_update, no_update, no_update, no_update, no_update, no_update,
             go.Figure(), dropdown_options, dropdown_options
         )
     elif selected_tab == 'tab-1':
         return (
-            map_fig, dash.no_update, dash.no_update,
-            scatter_fig_temp, scatter_fig_salinity, dash.no_update,
-            dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            map_fig, no_update, no_update,
+            scatter_fig_temp, scatter_fig_salinity, no_update,
+            no_update,
+            no_update, no_update, no_update, no_update, no_update, no_update,
             go.Figure(), dropdown_options, dropdown_options
         )
     elif selected_tab == 'tab-oxy-chl':
         return (
-            map_fig, dash.no_update, scatter_fig_doxy,
-            dash.no_update, dash.no_update, scatter_fig_chl,
-            dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            map_fig, no_update, scatter_fig_doxy,
+            no_update, no_update, scatter_fig_chl,
+            no_update,
+            no_update, no_update, no_update, no_update, no_update, no_update,
             go.Figure(), dropdown_options, dropdown_options
         )
     elif selected_tab == 'tab-2':
         return (
-            map_fig, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update,
+            map_fig, no_update, no_update,
+            no_update, no_update, no_update,
+            no_update,
             scatter_fig_vrs, scatter_fig_vrs_std, scatter_fig_vk, scatter_fig_vk_std, scatter_fig_ik, scatter_fig_ib,
             go.Figure(), dropdown_options, dropdown_options
         )
     elif selected_tab == 'tab-property':
         return (
-            map_fig, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            map_fig, no_update, no_update,
+            no_update, no_update, no_update,
+            no_update,
+            no_update, no_update, no_update, no_update, no_update, no_update,
             fig_property, dropdown_options, dropdown_options
         )
     else:
         return (
-            map_fig, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            map_fig, no_update, no_update,
+            no_update, no_update, no_update,
+            no_update,
+            no_update, no_update, no_update, no_update, no_update, no_update,
             go.Figure(), dropdown_options, dropdown_options
         )
 
