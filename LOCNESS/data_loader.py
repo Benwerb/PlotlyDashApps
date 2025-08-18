@@ -52,7 +52,7 @@ class GliderDataLoader:
         Returns:
             A single concatenated DataFrame from all files.
         """
-        dfs = []
+        dfs = []  # Fresh list each time
 
         for fname in self.file_list:
             file_url = self.folder_url + fname
@@ -63,7 +63,7 @@ class GliderDataLoader:
             except Exception as e:
                 continue
 
-            # Clean
+            # Clean and process
             df.columns = df.columns.str.replace('Â', '', regex=False)
             df.replace([-1e10, -999], pd.NA, inplace=True)
             df['Date'] = pd.to_datetime(df['mon/day/yr'], format='%m/%d/%Y', errors='coerce')
@@ -72,28 +72,26 @@ class GliderDataLoader:
                 format='%m/%d/%Y %H:%M',
                 errors='coerce'
             )
-            # Add Unix timestamp (seconds since epoch)
             df['unixTimestamp'] = df['Datetime'].astype('int64') // 10**9
+
             if 'PHIN_CANYONB[Total]' in df.columns and 'pHinsitu[Total]' in df.columns:
                 df['pHin_Canb_Delta'] = df['pHinsitu[Total]'] - df['PHIN_CANYONB[Total]']
             else:
                 df['pHin_Canb_Delta'] = pd.NA
 
-            df['source_file'] = fname  # optional: keep track of file origin
+            df['source_file'] = fname
             dfs.append(df)
 
-        # Ensure all DataFrames have the same columns before concatenation
+        # Ensure all DataFrames have the same columns
         if dfs:
-            # Get all unique columns from all DataFrames
             all_columns = set()
             for df in dfs:
                 all_columns.update(df.columns)
-            
-            # Add missing columns to each DataFrame with appropriate data types
+
+            # Add missing columns
             for i, df in enumerate(dfs):
                 missing_columns = all_columns - set(df.columns)
                 for col in missing_columns:
-                    # Determine appropriate dtype based on column name or existing data
                     if 'Date' in col or 'Datetime' in col:
                         dfs[i][col] = pd.Series(dtype='datetime64[ns]')
                     elif 'unixTimestamp' in col:
@@ -102,20 +100,26 @@ class GliderDataLoader:
                         dfs[i][col] = pd.Series(dtype='float64')
                     else:
                         dfs[i][col] = pd.Series(dtype='object')
-            
-            # Ensure all DataFrames have columns in the same order
+
+            # Ensure same column order
             column_order = sorted(list(all_columns))
             for i, df in enumerate(dfs):
                 dfs[i] = df.reindex(columns=column_order)
 
-
-            # After loading all files, resample
-        if self.sample_rate is not None and self.sample_rate > 1:
+            # Concatenate and resample
             df_combined = pd.concat(dfs, ignore_index=True)
-            df_resampled = df_combined.iloc[::self.sample_rate].copy()
-            return df_resampled
+
+            # Clear the list to free memory
+            dfs.clear()  # ADD THIS LINE!
+
+            # Apply resampling if specified
+            if self.sample_rate is not None and self.sample_rate > 1:
+                df_resampled = df_combined.iloc[::self.sample_rate].copy()
+                return df_resampled
+            else:
+                return df_combined
         else:
-            return pd.concat(dfs, ignore_index=True)
+            return pd.DataFrame()  # Return empty DataFrame if no files
 
 class GulfStreamLoader:
     def __init__(self):
@@ -210,10 +214,10 @@ class MapDataLoader:
         df.columns = df.columns.str.replace('Â', '', regex=False)
         df.replace([-1e10, -999], pd.NA, inplace=True)
         df['Datetime'] = pd.to_datetime(df['unixTimestamp'], unit='s', errors='coerce')
-        
+
         # Remove rows where lat or lon are missing
         df = df.dropna(subset=['lat', 'lon'])
-        
+
         return df
 
 class GliderGridDataLoader:
@@ -270,7 +274,7 @@ class GliderGridDataLoader:
 
         # Clean
         df.columns = df.columns.str.replace('Â', '', regex=False)
-        
+
         return df
 
 class MPADataLoader:
@@ -327,9 +331,9 @@ class MPADataLoader:
 
         # Clean
         df.columns = df.columns.str.replace('Â', '', regex=False)
-        
+
         return df
-    
+
 class gomofsdataloader:
     def __init__(self, filenames=None):
         """
@@ -383,9 +387,9 @@ class gomofsdataloader:
         df = pd.read_csv(file_content, delimiter=",", dtype={'trajectory': 'float64', 'obs': 'float64' ,'lat': 'float64', 'lon': 'float64', 'z': 'float64'}, parse_dates=['time'])
         # Clean
         df.columns = df.columns.str.replace('Â', '', regex=False)
-        
+
         return df
-    
+
 class doppiodataloader:
     def __init__(self, filenames=None):
         """
@@ -439,5 +443,5 @@ class doppiodataloader:
         df = pd.read_csv(file_content, delimiter=",", dtype={'trajectory': 'float64', 'obs': 'float64' ,'lat': 'float64', 'lon': 'float64', 'z': 'float64'}, parse_dates=['time'])
         # Clean
         df.columns = df.columns.str.replace('Â', '', regex=False)
-        
+
         return df
