@@ -10,13 +10,13 @@ from bs4 import BeautifulSoup
 from io import StringIO
 import re
 from data_loader import GliderDataLoader, GulfStreamLoader, MapDataLoader, GliderGridDataLoader, MPADataLoader, gomofsdataloader, doppiodataloader
-from nessie_interpolation_function import create_spatial_interpolation
+# from nessie_interpolation_function import create_spatial_interpolation
 import datetime as dt
 from typing import cast, List, Dict, Any
 import pytz
 from plotly.validator_cache import ValidatorCache
 import numpy as np
-from scipy.interpolate import griddata
+# from scipy.interpolate import griddata
 
 def get_first_10_pH_average(df_latest):
     df_MLD_average = df_latest.drop_duplicates(subset=['Station', 'Cruise'], keep='first').copy()
@@ -1504,37 +1504,52 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         Input('interval-refresh', 'n_intervals'),
     ]
 )
-
 def update_range_slider(glider_overlay, n):
-    df_map = map_loader.load_data()
-    if df_map.empty:
-        # Return safe defaults if no data
-        return 0, 1, [0, 1], {0: "No data"}
-    unix_min = df_map["unixTimestamp"].min()
-    unix_max = df_map["unixTimestamp"].max()
-    unix_max_minus_12hrs = unix_max - 60*60*12
-    marks = range_slider_marks(df_map, 10) # Need to fix the marks
+    try:
+        df_map = map_loader.load_data()
+        if df_map.empty:
+            # Return safe defaults if no data - must return 8 values to match outputs
+            return 0, 1, [0, 1], {0: "No data"}, "No data available", "No data", "No data", "No data"
+        
+        unix_min = df_map["unixTimestamp"].min()
+        unix_max = df_map["unixTimestamp"].max()
+        unix_max_minus_12hrs = unix_max - 60*60*12
+        marks = range_slider_marks(df_map, 10)
 
-    # MAKE THIS ALL A TABLE NOT STRINGS
-    datetime_max = df_map[df_map['Layer'] != 'WPT']["Datetime"].max() # Filter out WPT rows because they are ahead of time
-    utc_str = datetime_max.strftime("%Y-%m-%d %H:%M:%S")
-    et_str = datetime_max.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
-    pt_str = datetime_max.tz_localize("UTC").tz_convert("US/Pacific").strftime("%Y-%m-%d %H:%M:%S")
-    update_str = f'Last Updated: {utc_str} UTC | {et_str} ET | {pt_str} PT'
-    map_069 = df_map[(df_map['Layer'] == 'WPT') & (df_map['Cruise'] == '25706901')].iloc[-1]
-    map_069_dt_utc = map_069["Datetime"]
-    map_069_dt_ET = map_069_dt_utc.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
-    map_209 = df_map[(df_map['Layer'] == 'WPT') & (df_map['Cruise'] == '25720901')].iloc[-1]
-    map_209_dt_utc = map_209["Datetime"]
-    map_209_dt_ET = map_209_dt_utc.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
-    map_210 = df_map[(df_map['Layer'] == 'WPT') & (df_map['Cruise'] == '25821001')].iloc[-1]
-    map_210_dt_utc = map_210["Datetime"]
-    map_210_dt_ET = map_210_dt_utc.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
-    update_projection_str_069 = f'SN069, {map_069_dt_ET} +/- 5 min, {map_069["lat"]:.4f}, {map_069["lon"]:.4f}, +/- 500m'
-    update_projection_str_209 = f'SN209, {map_209_dt_ET} +/- 5 min, {map_209["lat"]:.4f}, {map_209["lon"]:.4f}, +/- 500m'
-    update_projection_str_210 = f'SN210, {map_210_dt_ET} +/- 5 min, {map_210["lat"]:.4f}, {map_210["lon"]:.4f}, +/- 500m'
+        # Filter out WPT rows for datetime calculation
+        non_wpt_data = df_map[df_map['Layer'] != 'WPT']
+        if non_wpt_data.empty:
+            return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks, "No non-WPT data", "No data", "No data", "No data"
+        
+        datetime_max = non_wpt_data["Datetime"].max()
+        utc_str = datetime_max.strftime("%Y-%m-%d %H:%M:%S")
+        et_str = datetime_max.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
+        pt_str = datetime_max.tz_localize("UTC").tz_convert("US/Pacific").strftime("%Y-%m-%d %H:%M:%S")
+        update_str = f'Last Updated: {utc_str} UTC | {et_str} ET | {pt_str} PT'
+        
+        # Safely get projection data for each glider
+        def get_glider_projection(df, cruise_id):
+            try:
+                glider_data = df[(df['Layer'] == 'WPT') & (df['Cruise'] == cruise_id)]
+                if glider_data.empty:
+                    return "No projection data"
+                glider_row = glider_data.iloc[-1]
+                dt_utc = glider_row["Datetime"]
+                dt_ET = dt_utc.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
+                return f'SN{cruise_id[-2:]}, {dt_ET} +/- 5 min, {glider_row["lat"]:.4f}, {glider_row["lon"]:.4f}, +/- 500m'
+            except Exception as e:
+                return f"Error: {str(e)}"
+        
+        update_projection_str_069 = get_glider_projection(df_map, '25706901')
+        update_projection_str_209 = get_glider_projection(df_map, '25720901')
+        update_projection_str_210 = get_glider_projection(df_map, '25821001')
 
-    return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks, update_str, update_projection_str_069, update_projection_str_209, update_projection_str_210
+        return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks, update_str, update_projection_str_069, update_projection_str_209, update_projection_str_210
+    
+    except Exception as e:
+        # Return safe defaults on any error - must return 8 values to match outputs
+        print(f"Error in update_range_slider: {e}")
+        return 0, 1, [0, 1], {0: "Error"}, f"Error: {str(e)}", "Error", "Error", "Error"
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port
