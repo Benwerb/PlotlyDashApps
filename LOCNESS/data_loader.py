@@ -7,7 +7,7 @@ import re
 import gc
 
 class GliderDataLoader:
-    def __init__(self, filenames=None, sample_rate=None):
+    def __init__(self, filenames=None, sample_rate=None, include_qc=False, range_start=None, range_end=None):
         """
         Initialize DataLoader. Always fetches available RT.txt files.
 
@@ -17,6 +17,9 @@ class GliderDataLoader:
         self.folder_url = "https://www3.mbari.org/lobo/Data/GliderVizData/"
         self.available_files = self._get_available_files()
         self.sample_rate = sample_rate
+        self.include_qc = include_qc
+        self.range_start = range_start
+        self.range_end = range_end
         if not self.available_files:
             raise FileNotFoundError("No RT.txt files found at the specified URL.")
 
@@ -74,9 +77,12 @@ class GliderDataLoader:
                 errors='coerce'
             )
             df['unixTimestamp'] = df['Datetime'].astype('int64') // 10**9
-            # Drop columns that contain "_QC" to save memory
-            qc_columns = [col for col in df.columns if '_QC' in col]
-            df.drop(columns=qc_columns, inplace=True)
+            if not self.include_qc:
+                # Drop columns that contain "_QC" to save memory
+                qc_columns = [col for col in df.columns if '_QC' in col]
+                df.drop(columns=qc_columns, inplace=True)
+            if self.range_start is not None and self.range_end is not None:
+                df = df[(df['unixTimestamp'] >= self.range_start) & (df['unixTimestamp'] <= self.range_end)]
             if 'PHIN_CANYONB[Total]' in df.columns and 'pHinsitu[Total]' in df.columns:
                 df['pHin_Canb_Delta'] = df['pHinsitu[Total]'] - df['PHIN_CANYONB[Total]']
             else:
