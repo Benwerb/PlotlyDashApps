@@ -28,34 +28,52 @@ class CachedDataLoader:
         self.cache_duration = cache_duration
         self._cached_data = None
         self._last_load_time = 0
-        self._loading = False  # Add loading flag
-        self._lock = threading.Lock()  # Add thread lock
+        self._loading = False
+        self._lock = threading.Lock()
+        self._cached_time_range = None  # Store the time range that was cached
     
-    def get_data(self):
+    def get_data(self, time_range=None):
+        """
+        Get data, optionally filtered by time range
+        time_range: tuple of (start_unix, end_unix) or None for all data
+        """
         current_time = time.time()
         
-        # If data is being loaded, wait for it
-        if self._loading:
-            # Wait for loading to complete
-            while self._loading:
-                time.sleep(0.1)
-            return self._cached_data
+        # Check if we need to reload (different time range or expired cache)
+        needs_reload = (
+            self._cached_data is None or
+            current_time - self._last_load_time > self.cache_duration or
+            self._cached_time_range != time_range
+        )
         
-        if (self._cached_data is None or 
-            current_time - self._last_load_time > self.cache_duration):
-            
+        if needs_reload:
             with self._lock:
-                if self._loading:  # Double-check pattern
+                if self._loading:
+                    while self._loading:
+                        time.sleep(0.1)
                     return self._cached_data
                 
                 self._loading = True
                 try:
-                    if self._cached_data is not None:
-                        del self._cached_data
-                        gc.collect()
+                    # Load full dataset
+                    full_data = self.loader.load_data()
                     
-                    self._cached_data = self.loader.load_data()
+                    # Apply time filter if specified
+                    if time_range and not full_data.empty:
+                        start_time, end_time = time_range
+                        mask = (full_data['unixTimestamp'] >= start_time) & \
+                               (full_data['unixTimestamp'] <= end_time)
+                        self._cached_data = full_data[mask].copy()
+                    else:
+                        self._cached_data = full_data
+                    
+                    self._cached_time_range = time_range
                     self._last_load_time = current_time
+                    
+                    # Clean up full dataset to save memory
+                    del full_data
+                    gc.collect()
+                    
                 finally:
                     self._loading = False
         
@@ -68,14 +86,6 @@ class CachedDataLoader:
             gc.collect()
         self._cached_data = None
         return self.get_data()
-
-# Create cached versions
-cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'], sample_rate=3))
-cached_map_loader = CachedDataLoader(MapDataLoader())
-cached_glider_grid_loader = CachedDataLoader(GliderGridDataLoader())
-cached_mpa_loader = CachedDataLoader(MPADataLoader())
-cached_gomofs_loader = CachedDataLoader(gomofsdataloader())
-cached_doppio_loader = CachedDataLoader(doppiodataloader())
 
 def get_first_10_pH_average(df_latest):
     df_MLD_average = df_latest.drop_duplicates(subset=['Station', 'Cruise'], keep='first').copy()
@@ -426,7 +436,14 @@ def range_slider_marks(df, target_mark_count=10):
     }
 
     return marks
-
+# Create cached versions
+cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'],
+    sample_rate=3, include_qc=False, range_start=None, range_end=None))
+cached_map_loader = CachedDataLoader(MapDataLoader())
+cached_glider_grid_loader = CachedDataLoader(GliderGridDataLoader())
+cached_mpa_loader = CachedDataLoader(MPADataLoader())
+cached_gomofs_loader = CachedDataLoader(gomofsdataloader())
+cached_doppio_loader = CachedDataLoader(doppiodataloader())
 gs = GulfStreamLoader()
 GulfStreamBounds = gs.load_data()
 glider_ids = ['SN203', 'SN209', 'SN210','SN069']
@@ -837,34 +854,21 @@ app.layout = dbc.Container([
     ]
 )
 def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected_tab, range_value, selected_layer, selected_cast_direction, property_x, property_y):
-    # Log memory at start of callback
     log_memory_usage()
     
-    # Use cached data
-    df_latest = cached_loader.get_data()
-    df_map = cached_map_loader.get_data()
-    df_glider_grid = cached_glider_grid_loader.get_data()
-    df_mpa = cached_mpa_loader.get_data()
+    # Get data filtered by current range slider
+    if range_value and len(range_value) == 2:
+        df_latest = cached_loader.get_data(time_range=range_value)
+        df_map_filtered = cached_map_loader.get_data(time_range=range_value)
+    else:
+        df_latest = cached_loader.get_data()
+        df_map_filtered = cached_map_loader.get_data()
     
     # Filter glider assets (this is necessary)
-    df_latest = filter_glider_assets(df_latest, glider_overlay)
+    df_latest_filtered = filter_glider_assets(df_latest, glider_overlay)
     
     # Log memory after data loading
     log_memory_usage()
-    
-    # Use .loc instead of creating copies
-    if range_value[0] != range_value[1]:
-        # Create boolean masks instead of new DataFrames
-        time_mask = (df_latest['unixTimestamp'] >= range_value[0]) & \
-                   (df_latest['unixTimestamp'] <= range_value[1])
-        df_latest_filter = df_latest[time_mask]
-        
-        time_mask_map = (df_map['unixTimestamp'] >= range_value[0]) & \
-                       (df_map['unixTimestamp'] <= range_value[1])
-        df_map_filtered = df_map[time_mask_map]
-    else:
-        df_latest_filter = df_latest
-        df_map_filtered = df_map
     
     # Use boolean masks instead of creating new DataFrames
     drifter_mask = df_map_filtered['Platform'] == "Drifter"
@@ -891,23 +895,24 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Up') | (df_map_filtered['CastDirection'] == 'Down') | (df_map_filtered['CastDirection'] == 'Constant')]
     elif selected_cast_direction == 'Up':
         df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Up') | (df_map_filtered['CastDirection'] == 'Constant')]
-        df_latest_filter = df_latest_filter[df_latest_filter["DIVEDIR"] == 1]
+        df_latest_filtered = df_latest_filtered[df_latest_filtered["DIVEDIR"] == 1]
     elif selected_cast_direction == 'Down':
         df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Down') | (df_map_filtered['CastDirection'] == 'Constant')]
-        df_latest_filter = df_latest_filter[df_latest_filter["DIVEDIR"] == -1]
+        df_latest_filtered = df_latest_filtered[df_latest_filtered["DIVEDIR"] == -1]
     # Dataframes for map plot
-    df_ship = df_map_filtered[df_map_filtered['Cruise'] == "RV Connecticut"]
-    df_LRAUV = df_map_filtered[df_map_filtered['Platform'] == "LRAUV"]
-    df_SN209 = df_map_filtered[(df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] != 'WPT')]
-    df_SN210 = df_map_filtered[(df_map_filtered['Cruise'] == "25821001") & (df_map_filtered['Layer'] != 'WPT')]
-    df_SN069 = df_map_filtered[(df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] != 'WPT')]
-    df_SN209_nxt = df_map_filtered[(df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] == 'WPT')]
-    df_SN210_nxt = df_map_filtered[(df_map_filtered['Cruise'] == "25821001") & (df_map_filtered['Layer'] == 'WPT')]
-    df_SN069_nxt = df_map_filtered[(df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] == 'WPT')]
+    ship_mask = df_map_filtered['Cruise'] == "RV Connecticut"
+    lrauv_mask = df_map_filtered['Platform'] == "LRAUV"
+    sn209_mask = (df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] != 'WPT')
+    sn210_mask = (df_map_filtered['Cruise'] == "25821001") & (df_map_filtered['Layer'] != 'WPT')
+    sn069_mask = (df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] != 'WPT')
+    sn209_nxt_mask = (df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] == 'WPT')
+    sn210_nxt_mask = (df_map_filtered['Cruise'] == "25821001") & (df_map_filtered['Layer'] == 'WPT')
+    sn069_nxt_mask = (df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] == 'WPT')
+
     #  Weird issue with wpt when range slider is adjusted
     # Handle empty DataFrame case
     is_map_df = isinstance(df_map_filtered, pd.DataFrame)
-    is_latest_df = isinstance(df_latest_filter, pd.DataFrame)
+    is_latest_df = isinstance(df_latest_filtered, pd.DataFrame)
     if not is_map_df or df_map_filtered.empty:
         blank_fig = go.Figure()
         return (
@@ -917,48 +922,48 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             go.Figure(), [], []
         )
     # Set map center
-    if len(df_ship) > 0:
-        last_ship_lat = np.array(df_ship['lat'])[-1]
-        last_ship_lon = np.array(df_ship['lon'])[-1]
+    if len(df_map_filtered.loc[ship_mask]) > 0:
+        last_ship_lat = np.array(df_map_filtered.loc[ship_mask, 'lat'])[-1]
+        last_ship_lon = np.array(df_map_filtered.loc[ship_mask, 'lon'])[-1]
     else:
         last_ship_lat = np.array(df_map_filtered['lat'])[-1]
         last_ship_lon = np.array(df_map_filtered['lon'])[-1]
 
-    if len(df_LRAUV) > 0:
-        last_LRAUV_lat = np.array(df_LRAUV['lat'])[-1]
-        last_LRAUV_lon = np.array(df_LRAUV['lon'])[-1]
+    if len(df_map_filtered.loc[lrauv_mask]) > 0:
+        last_LRAUV_lat = np.array(df_map_filtered.loc[lrauv_mask, 'lat'])[-1]
+        last_LRAUV_lon = np.array(df_map_filtered.loc[lrauv_mask, 'lon'])[-1]
     else:
         last_LRAUV_lat = []
         last_LRAUV_lon = []
 
     # Last Glider Location SN209
-    if len(df_SN209) > 0:
-        last_glider_lat_SN209 = np.array(df_SN209['lat'])[-1]
-        last_glider_lon_SN209 = np.array(df_SN209['lon'])[-1]
-        next_glider_lat_SN209 = np.array(df_SN209_nxt['lat'])[-1]
-        next_glider_lon_SN209 = np.array(df_SN209_nxt['lon'])[-1]
+    if len(df_map_filtered.loc[sn209_mask]) > 0:
+        last_glider_lat_SN209 = np.array(df_map_filtered.loc[sn209_mask, 'lat'])[-1]
+        last_glider_lon_SN209 = np.array(df_map_filtered.loc[sn209_mask, 'lon'])[-1]
+        next_glider_lat_SN209 = np.array(df_map_filtered.loc[sn209_nxt_mask, 'lat'])[-1]
+        next_glider_lon_SN209 = np.array(df_map_filtered.loc[sn209_nxt_mask, 'lon'])[-1]
     else:
         last_glider_lat_SN209 = []
         last_glider_lon_SN209 = []
         next_glider_lat_SN209 = []
         next_glider_lon_SN209 = []
     # Last Glider Location SN210
-    if len(df_SN210) > 0:
-        last_glider_lat_SN210 = np.array(df_SN210['lat'])[-1]
-        last_glider_lon_SN210 = np.array(df_SN210['lon'])[-1]
-        next_glider_lat_SN210 = np.array(df_SN210_nxt['lat'])[-1]
-        next_glider_lon_SN210 = np.array(df_SN210_nxt['lon'])[-1]
+    if len(df_map_filtered.loc[sn210_mask]) > 0:
+        last_glider_lat_SN210 = np.array(df_map_filtered.loc[sn210_mask, 'lat'])[-1]
+        last_glider_lon_SN210 = np.array(df_map_filtered.loc[sn210_mask, 'lon'])[-1]
+        next_glider_lat_SN210 = np.array(df_map_filtered.loc[sn210_nxt_mask, 'lat'])[-1]
+        next_glider_lon_SN210 = np.array(df_map_filtered.loc[sn210_nxt_mask, 'lon'])[-1]
     else:
         last_glider_lat_SN210 = []
         last_glider_lon_SN210 = []
         next_glider_lat_SN210 = []
         next_glider_lon_SN210 = []
     # Last Glider Location SN069
-    if len(df_SN069) > 0:
-        last_glider_lat_SN069 = np.array(df_SN069['lat'])[-1]
-        last_glider_lon_SN069 = np.array(df_SN069['lon'])[-1]
-        next_glider_lat_SN069 = np.array(df_SN069_nxt['lat'])[-1]
-        next_glider_lon_SN069 = np.array(df_SN069_nxt['lon'])[-1]
+    if len(df_map_filtered.loc[sn069_mask]) > 0:
+        last_glider_lat_SN069 = np.array(df_map_filtered.loc[sn069_mask, 'lat'])[-1]
+        last_glider_lon_SN069 = np.array(df_map_filtered.loc[sn069_mask, 'lon'])[-1]
+        next_glider_lat_SN069 = np.array(df_map_filtered.loc[sn069_nxt_mask, 'lat'])[-1]
+        next_glider_lon_SN069 = np.array(df_map_filtered.loc[sn069_nxt_mask, 'lon'])[-1]
     else:
         last_glider_lat_SN069 = []
         last_glider_lon_SN069 = []
@@ -980,10 +985,10 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         cmin, cmax = None, None
         cscale = 'Cividis'
     # Only do this if coloring by unixTimestamp
-    if selected_parameter == 'unixTimestamp' and len(df_SN069) > 0:
+    if selected_parameter == 'unixTimestamp' and len(df_map_filtered.loc[sn069_mask]) > 0:
         # Get unique unixTimestamps and corresponding datetimes
-        unix_vals = df_SN069['unixTimestamp'].values
-        datetimes = df_SN069['Datetime'].dt.strftime('%m/%d %H:%M').values
+        unix_vals = df_map_filtered.loc[sn069_mask, 'unixTimestamp'].values
+        datetimes = df_map_filtered.loc[sn069_mask, 'Datetime'].dt.strftime('%m/%d %H:%M').values
 
         # Choose 5 evenly spaced indices
         n_ticks = 5
@@ -999,18 +1004,18 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         ticktext = None
    
     # Set hovertext based on selected parameter
-    if len(df_ship) > 0:
-        ship_hovertext = df_ship['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_ship[selected_parameter]
+    if len(df_map_filtered.loc[ship_mask]) > 0:
+        ship_hovertext = df_map_filtered.loc[ship_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[ship_mask, selected_parameter]
         ship_hovertext_last = np.array(ship_hovertext)[-1]
         map_fig.add_trace(go.Scattermap(
-                lat=df_ship['lat'],
-                lon=df_ship['lon'],
+                lat=df_map_filtered.loc[ship_mask, 'lat'],
+                lon=df_map_filtered.loc[ship_mask, 'lon'],
                 mode='lines+markers',
                 name='RV Connecticut',
                 hovertext=ship_hovertext,
                 marker=dict(
                     size=10,
-                    color=df_ship[selected_parameter],
+                    color=df_map_filtered.loc[ship_mask, selected_parameter],
                     colorscale=cscale,
                     showscale=True,
                     colorbar=dict(
@@ -1044,18 +1049,18 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         ))
 
     # Set hovertext based on selected parameter
-    if len(df_LRAUV) > 0:
-        LRAUV_hovertext = df_LRAUV['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_LRAUV[selected_parameter]
+    if len(df_map_filtered.loc[lrauv_mask]) > 0:
+        LRAUV_hovertext = df_map_filtered.loc[lrauv_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[lrauv_mask, selected_parameter]
         LRAUV_hovertext_last = np.array(LRAUV_hovertext)[-1]
         map_fig.add_trace(go.Scattermap(
-                lat=df_LRAUV['lat'],
-                lon=df_LRAUV['lon'],
+                lat=df_map_filtered.loc[lrauv_mask, 'lat'],
+                lon=df_map_filtered.loc[lrauv_mask, 'lon'],
                 mode='markers',
                 name='LRAUV',
                 hovertext=LRAUV_hovertext,
                 marker=dict(
                     size=10,
-                    color=df_LRAUV[selected_parameter],
+                    color=df_map_filtered.loc[lrauv_mask, selected_parameter],
                     colorscale=cscale,
                     showscale=False,
                     cmin=cmin,
@@ -1077,20 +1082,20 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         ))
 
     # Set hovertext for SN209 based on selected parameter
-    if len(df_SN209) > 0:
-        sn209_hovertext = df_SN209['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN209[selected_parameter]
-        sn209_hovertext_proj = df_SN209_nxt['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN209_nxt[selected_parameter]
+    if len(df_map_filtered.loc[sn209_mask]) > 0:
+        sn209_hovertext = df_map_filtered.loc[sn209_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[sn209_mask, selected_parameter]
+        sn209_hovertext_proj = df_map_filtered.loc[sn209_nxt_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[sn209_nxt_mask, selected_parameter]
         sn209_hovertext_last = np.array(sn209_hovertext)[-1]
         sn209_hovertext_nxt = np.array(sn209_hovertext_proj)[-1]
         map_fig.add_trace(go.Scattermap(
-        lat=df_SN209['lat'],
-        lon=df_SN209['lon'],
+        lat=df_map_filtered.loc[sn209_mask, 'lat'],
+        lon=df_map_filtered.loc[sn209_mask, 'lon'],
         mode='markers',
         name='SN209',
         hovertext=sn209_hovertext,
         marker=dict(
             size=10, 
-            color=df_SN209[selected_parameter],
+            color=df_map_filtered.loc[sn209_mask, selected_parameter],
             colorscale=cscale,
             showscale=False,
             cmin=cmin,
@@ -1124,20 +1129,20 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             showlegend=False
         ))
     # Set hovertext for SN210 based on selected parameter
-    if len(df_SN210) > 0:
-        sn210_hovertext = df_SN210['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN210[selected_parameter]
-        sn210_hovertext_proj = df_SN210_nxt['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN210_nxt[selected_parameter]
+    if len(df_map_filtered.loc[sn210_mask]) > 0:
+        sn210_hovertext = df_map_filtered.loc[sn210_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[sn210_mask, selected_parameter]
+        sn210_hovertext_proj = df_map_filtered.loc[sn210_nxt_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[sn210_nxt_mask, selected_parameter]
         sn210_hovertext_last = np.array(sn210_hovertext)[-1]
         sn210_hovertext_nxt = np.array(sn210_hovertext_proj)[-1]
         map_fig.add_trace(go.Scattermap(
-        lat=df_SN210['lat'],
-        lon=df_SN210['lon'],
+        lat=df_map_filtered.loc[sn210_mask, 'lat'],
+        lon=df_map_filtered.loc[sn210_mask, 'lon'],
         mode='markers',
         name='SN210',
         hovertext=sn210_hovertext,
         marker=dict(
             size=10, 
-            color=df_SN210[selected_parameter],
+            color=df_map_filtered.loc[sn210_mask, selected_parameter],
             colorscale=cscale,
             showscale=False,
             cmin=cmin,
@@ -1171,9 +1176,9 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             showlegend=False
         ))
     # Set hovertext for SN069 based on selected parameter
-    if len(df_SN069) > 0:
-        sn069_hovertext = df_SN069['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN069[selected_parameter]
-        sn069_hovertext_proj = df_SN069_nxt['Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_SN069_nxt[selected_parameter]
+    if len(df_map_filtered.loc[sn069_mask]) > 0:
+        sn069_hovertext = df_map_filtered.loc[sn069_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[sn069_mask, selected_parameter]
+        sn069_hovertext_proj = df_map_filtered.loc[sn069_nxt_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[sn069_nxt_mask, selected_parameter]
         sn069_hovertext_last = np.array(sn069_hovertext)[-1]
         sn069_hovertext_nxt = np.array(sn069_hovertext_proj)[-1]
         # For rhodamine, SN069 uses different range (0-15) while others use (0-100)
@@ -1183,14 +1188,14 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             sn069_cmin, sn069_cmax = cmin, cmax
             
         map_fig.add_trace(go.Scattermap(
-            lat=df_SN069['lat'],
-            lon=df_SN069['lon'],
+            lat=df_map_filtered.loc[sn069_mask, 'lat'],
+            lon=df_map_filtered.loc[sn069_mask, 'lon'],
             mode='markers',
             name='SN069',
             hovertext=sn069_hovertext,
             marker=dict(
                 size=10, 
-                color=df_SN069[selected_parameter],
+                color=df_map_filtered.loc[sn069_mask, selected_parameter],
                 colorscale=cscale,  
                 showscale=False,
                 cmin=sn069_cmin,
@@ -1259,19 +1264,19 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
 
     if 'glider_grid' in map_options:
         map_fig.add_trace(go.Scattermap(
-            lat=df_glider_grid['Lat'],
-            lon=df_glider_grid['Lon'],
+            lat=cached_glider_grid_loader.df_glider_grid['Lat'],
+            lon=cached_glider_grid_loader.df_glider_grid['Lon'],
             mode='markers',
             name='Glider Grid',
             marker=dict(size=6, color='black', opacity=0.5),
-            text = df_glider_grid['Grid_ID'],
+            text = cached_glider_grid_loader.df_glider_grid['Grid_ID'],
             textposition = "bottom right",
         ))
 
     if 'mpa' in map_options:
         map_fig.add_trace(go.Scattermap(
-            lat=df_mpa['Lat'],
-            lon=df_mpa['Lon'],
+            lat=cached_mpa_loader.df_mpa['Lat'],
+            lon=cached_mpa_loader.df_mpa['Lon'],
             mode='lines',
             name='Stellwagen Bank MPA',
             line=dict(width=4, color='red'),
@@ -1279,12 +1284,10 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             textposition = "bottom right",
         ))
     if 'gomofs' in map_options:
-        gomofs_loader = gomofsdataloader()
-        df_gomofs = gomofs_loader.load_data()
-        gomofshovertext = df_gomofs['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        gomofshovertext = cached_gomofs_loader.df_gomofs['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
         map_fig.add_trace(go.Scattermap(
-            lat=df_gomofs['lat'],
-            lon=df_gomofs['lon'],
+            lat=cached_gomofs_loader.df_gomofs['lat'],
+            lon=cached_gomofs_loader.df_gomofs['lon'],
             mode='lines+markers',
             name='gomofs tracks',
             line=dict(width=2, color='red'),
@@ -1292,12 +1295,10 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             textposition = "bottom right",
         ))
     if 'doppio' in map_options:
-        doppio_loader = doppiodataloader()
-        df_doppio = doppio_loader.load_data()
-        doppioshovertext = df_doppio['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        doppioshovertext = cached_doppio_loader.df_doppio['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
         map_fig.add_trace(go.Scattermap(
-            lat=df_doppio['lat'],
-            lon=df_doppio['lon'],
+            lat=cached_doppio_loader.df_doppio['lat'],
+            lon=cached_doppio_loader.df_doppio['lon'],
             mode='lines+markers',
             name='doppio tracks',
             line=dict(width=2, color='orange'),
@@ -1341,7 +1342,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
 )
 
     # For scatter plots: full filtered DataFrame
-    if len(df_latest_filter) == 0:
+    if len(df_latest_filtered) == 0:
         scatter_fig_pHin = go.Figure()
         scatter_fig_doxy = go.Figure()
         scatter_fig_temp = go.Figure()
@@ -1356,75 +1357,75 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         scatter_fig_ib = go.Figure()
     else:
         scatter_fig_pHin = make_depth_line_plot(
-            df_latest_filter,
+            df_latest_filtered,
             x="pHinsitu[Total]",
             title="pHinsitu[Total] vs. Depth"
         )
         scatter_fig_doxy = make_depth_line_plot(
-            df_latest_filter,
+            df_latest_filtered,
             x="Oxygen[µmol/kg]",
             title="Oxygen[µmol/kg] vs. Depth"
         )
         scatter_fig_temp = make_depth_line_plot(
-            df_latest_filter,
+            df_latest_filtered,
             x="Temperature[°C]",
             title="Temperature[°C] vs. Depth"
         )
         scatter_fig_salinity = make_depth_line_plot(
-            df_latest_filter,
+            df_latest_filtered,
             x="Salinity[pss]",
             title="Salinity[pss] vs. Depth"
         )
         # Changed to Sigma!!!!!!!!!
         scatter_fig_chl = make_depth_line_plot(
-            df_latest_filter,
+            df_latest_filtered,
             x="Sigma_theta[kg/m^3]",
             title="Sigma_theta[kg/m^3] vs. Depth"
         )
         scatter_fig_rho = make_depth_line_plot(
-            df_latest_filter,
+            df_latest_filtered,
             x="RHODAMINE[ppb]",
             title="RHODAMINE[ppb] vs. Depth"
         )
         scatter_fig_vrs = make_depth_line_plot(
-            df_latest_filter,
+            df_latest_filtered,
             x="VRS[Volts]",
             title="VRS[Volts] vs. Depth"
         )
         scatter_fig_vrs_std = make_depth_line_plot(
-            df_latest_filter,
+            df_latest_filtered,
             x="VRS_STD[Volts]",
             title="VRS_STD[Volts] vs. Depth"
         )
         scatter_fig_vk = make_depth_line_plot(
-            df_latest_filter,
+            df_latest_filtered,
             x="VK[Volts]",
             title="VK[Volts] vs. Depth"
         )
         scatter_fig_vk_std = make_depth_line_plot(
-            df_latest_filter,
+            df_latest_filtered,
             x="VK_STD[Volts]",
             title="VK_STD[Volts] vs. Depth"
         )
         scatter_fig_ik = make_depth_line_plot(
-            df_latest_filter,
+            df_latest_filtered,
             x="IK[nA]",
             title="IK[nA] vs. Depth"
         )
         scatter_fig_ib = make_depth_line_plot(
-            df_latest_filter,
+            df_latest_filtered,
             x="Ib[nA]",
             title="Ib[nA] vs. Depth"
         )
     # Property plot dropdown options
-    if len(df_latest_filter) > 0:
+    if len(df_latest_filtered) > 0:
         dropdown_options = [
             {'label': col, 'value': col}
-            for col in df_latest_filter.columns if 'QF' not in col
+            for col in df_latest_filtered.columns if 'QF' not in col
         ]
         # Get unique unixTimestamps and corresponding datetimes
-        unix_vals = df_latest_filter['unixTimestamp'].values
-        datetimes = df_latest_filter['Datetime'].dt.strftime('%m/%d %H:%M').values
+        unix_vals = df_latest_filtered['unixTimestamp'].values
+        datetimes = df_latest_filtered['Datetime'].dt.strftime('%m/%d %H:%M').values
 
         # Choose 10 evenly spaced indices
         n_ticks = 5
@@ -1438,19 +1439,19 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     else:
         dropdown_options = []
     # Property plot figure
-    if selected_tab == 'tab-property' and property_x and property_y and len(df_latest_filter) > 0:
+    if selected_tab == 'tab-property' and property_x and property_y and len(df_latest_filtered) > 0:
         fig_property = px.scatter(
-            df_latest_filter, x=property_x, y=property_y,
+            df_latest_filtered, x=property_x, y=property_y,
             
             # colorbar=dict(len=1,tickvals=tickvals,ticktext=ticktext),
             title=f'{property_x} vs. {property_y}',
             template='plotly_white',
-            color='unixTimestamp' if 'unixTimestamp' in df_latest_filter.columns else None,
+            color='unixTimestamp' if 'unixTimestamp' in df_latest_filtered.columns else None,
         )
         if 'Depth[m]' in [property_x, property_y]:
             fig_property.update_yaxes(autorange="reversed")
         fig_property.update_traces(marker=dict(size=6))
-        if 'unixTimestamp' in df_latest_filter.columns:
+        if 'unixTimestamp' in df_latest_filtered.columns:
             fig_property.update_layout(
                 coloraxis_colorbar=dict(
                     len=1,
