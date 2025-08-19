@@ -19,29 +19,58 @@ from typing import cast, List, Dict, Any
 import time
 import psutil
 import os
+import gc
+import threading
 
 class CachedDataLoader:
-    def __init__(self, loader, cache_duration=3600):  # 1 hour
+    def __init__(self, loader, cache_duration=600):  # 10 minutes
         self.loader = loader
         self.cache_duration = cache_duration
         self._cached_data = None
         self._last_load_time = 0
+        self._loading = False  # Add loading flag
+        self._lock = threading.Lock()  # Add thread lock
     
     def get_data(self):
         current_time = time.time()
+        
+        # If data is being loaded, wait for it
+        if self._loading:
+            # Wait for loading to complete
+            while self._loading:
+                time.sleep(0.1)
+            return self._cached_data
+        
         if (self._cached_data is None or 
             current_time - self._last_load_time > self.cache_duration):
-            self._cached_data = self.loader.load_data()
-            self._last_load_time = current_time
+            
+            with self._lock:
+                if self._loading:  # Double-check pattern
+                    return self._cached_data
+                
+                self._loading = True
+                try:
+                    if self._cached_data is not None:
+                        del self._cached_data
+                        gc.collect()
+                    
+                    self._cached_data = self.loader.load_data()
+                    self._last_load_time = current_time
+                finally:
+                    self._loading = False
+        
         return self._cached_data
     
     def force_refresh(self):
         """Force a refresh of the cached data"""
+        if self._cached_data is not None:
+            del self._cached_data
+            gc.collect()
         self._cached_data = None
         return self.get_data()
 
 # Create cached versions
-cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'], sample_rate=2))
+cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'], sample_rate=3))
 cached_map_loader = CachedDataLoader(MapDataLoader())
 cached_glider_grid_loader = CachedDataLoader(GliderGridDataLoader())
 cached_mpa_loader = CachedDataLoader(MPADataLoader())
@@ -400,7 +429,7 @@ def range_slider_marks(df, target_mark_count=10):
 
 gs = GulfStreamLoader()
 GulfStreamBounds = gs.load_data()
-glider_ids = ['SN203', 'SN209', 'SN210', 'SN211','SN069']
+glider_ids = ['SN203', 'SN209', 'SN210','SN069']
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = cast(List[str | Dict[str, Any]], [dbc.themes.FLATLY])
