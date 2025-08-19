@@ -4,6 +4,7 @@ import pandas as pd
 from io import StringIO
 from bs4 import BeautifulSoup, Tag
 import re
+import gc
 
 class GliderDataLoader:
     def __init__(self, filenames=None, sample_rate=None):
@@ -109,8 +110,11 @@ class GliderDataLoader:
             # Concatenate and resample
             df_combined = pd.concat(dfs, ignore_index=True)
 
-            # Clear the list to free memory
-            dfs.clear()  # ADD THIS LINE!
+            # # Clear the list to free memory
+            # dfs.clear()  # ADD THIS LINE!
+            # Explicitly free intermediates
+            del dfs
+            gc.collect()
 
             # Apply resampling if specified
             if self.sample_rate is not None and self.sample_rate > 1:

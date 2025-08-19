@@ -21,7 +21,7 @@ import psutil
 import os
 
 class CachedDataLoader:
-    def __init__(self, loader, cache_duration=300):  # 5 minutes
+    def __init__(self, loader, cache_duration=3600):  # 1 hour
         self.loader = loader
         self.cache_duration = cache_duration
         self._cached_data = None
@@ -42,7 +42,6 @@ class CachedDataLoader:
 
 # Create cached versions
 cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'], sample_rate=2))
-# cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt']))
 cached_map_loader = CachedDataLoader(MapDataLoader())
 cached_glider_grid_loader = CachedDataLoader(GliderGridDataLoader())
 cached_mpa_loader = CachedDataLoader(MPADataLoader())
