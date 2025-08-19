@@ -74,7 +74,9 @@ class GliderDataLoader:
                 errors='coerce'
             )
             df['unixTimestamp'] = df['Datetime'].astype('int64') // 10**9
-
+            # Drop columns that contain "_QC" to save memory
+            qc_columns = [col for col in df.columns if '_QC' in col]
+            df.drop(columns=qc_columns, inplace=True)
             if 'PHIN_CANYONB[Total]' in df.columns and 'pHinsitu[Total]' in df.columns:
                 df['pHin_Canb_Delta'] = df['pHinsitu[Total]'] - df['PHIN_CANYONB[Total]']
             else:
