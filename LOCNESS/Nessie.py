@@ -437,7 +437,7 @@ def range_slider_marks(df, target_mark_count=10):
 
     return marks
 # Create cached versions
-cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'],
+cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt'],
     sample_rate=3, include_qc=False, range_start=None, range_end=None))
 cached_map_loader = CachedDataLoader(MapDataLoader())
 cached_glider_grid_loader = CachedDataLoader(GliderGridDataLoader())
@@ -446,7 +446,7 @@ cached_gomofs_loader = CachedDataLoader(gomofsdataloader())
 cached_doppio_loader = CachedDataLoader(doppiodataloader())
 gs = GulfStreamLoader()
 GulfStreamBounds = gs.load_data()
-glider_ids = ['SN203', 'SN209', 'SN210','SN069']
+glider_ids = ['SN209', 'SN210','SN069']
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = cast(List[str | Dict[str, Any]], [dbc.themes.FLATLY])
@@ -1641,4 +1641,4 @@ def log_memory_usage():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port
-    app.run(host="0.0.0.0", port=str(port), debug=True)
+    app.run(host="0.0.0.0", port=str(port), debug=False)
