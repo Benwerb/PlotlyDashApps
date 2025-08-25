@@ -440,8 +440,10 @@ def range_slider_marks(df, target_mark_count=10):
 cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt'],
     sample_rate=3, include_qc=False, range_start=None, range_end=None))
 cached_map_loader = CachedDataLoader(MapDataLoader())
-cached_glider_grid_loader = CachedDataLoader(GliderGridDataLoader())
-cached_mpa_loader = CachedDataLoader(MPADataLoader())
+glider_grid_loader = GliderGridDataLoader()
+df_glider_grid = glider_grid_loader.load_data()
+mpa_loader = MPADataLoader()
+df_mpa = mpa_loader.load_data()
 cached_gomofs_loader = CachedDataLoader(gomofsdataloader())
 cached_doppio_loader = CachedDataLoader(doppiodataloader())
 gs = GulfStreamLoader()
@@ -1264,19 +1266,19 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
 
     if 'glider_grid' in map_options:
         map_fig.add_trace(go.Scattermap(
-            lat=cached_glider_grid_loader.df_glider_grid['Lat'],
-            lon=cached_glider_grid_loader.df_glider_grid['Lon'],
+            lat=df_glider_grid['Lat'],
+            lon=df_glider_grid['Lon'],
             mode='markers',
             name='Glider Grid',
             marker=dict(size=6, color='black', opacity=0.5),
-            text = cached_glider_grid_loader.df_glider_grid['Grid_ID'],
+            text = df_glider_grid['Grid_ID'],
             textposition = "bottom right",
         ))
 
     if 'mpa' in map_options:
         map_fig.add_trace(go.Scattermap(
-            lat=cached_mpa_loader.df_mpa['Lat'],
-            lon=cached_mpa_loader.df_mpa['Lon'],
+            lat=df_mpa['Lat'],
+            lon=df_mpa['Lon'],
             mode='lines',
             name='Stellwagen Bank MPA',
             line=dict(width=4, color='red'),
