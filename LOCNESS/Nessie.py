@@ -437,23 +437,93 @@ def range_slider_marks(df, target_mark_count=10):
 
     return marks
 # Create cached versions
-cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'],
-    sample_rate=3, include_qc=False, range_start=None, range_end=None))
-cached_map_loader = CachedDataLoader(MapDataLoader())
-glider_grid_loader = GliderGridDataLoader()
-df_glider_grid = glider_grid_loader.load_data()
-mpa_loader = MPADataLoader()
-df_mpa = mpa_loader.load_data()
-cached_gomofs_loader = CachedDataLoader(gomofsdataloader())
-cached_doppio_loader = CachedDataLoader(doppiodataloader())
-gs = GulfStreamLoader()
-GulfStreamBounds = gs.load_data()
+# Initialize loaders but don't load data yet - this will be done lazily
+cached_loader = None
+cached_map_loader = None
+glider_grid_loader = None
+df_glider_grid = None
+mpa_loader = None
+df_mpa = None
+cached_gomofs_loader = None
+cached_doppio_loader = None
+gs = None
+GulfStreamBounds = None
+
+def initialize_data_loaders():
+    """Initialize data loaders lazily to avoid deployment issues"""
+    global cached_loader, cached_map_loader, glider_grid_loader, df_glider_grid
+    global mpa_loader, df_mpa, cached_gomofs_loader, cached_doppio_loader, gs, GulfStreamBounds
+    
+    try:
+        print("Initializing data loaders...")
+        
+        # Initialize core loaders first
+        cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'],
+            sample_rate=3, include_qc=False, range_start=None, range_end=None))
+        print("✓ Glider data loader initialized")
+        
+        cached_map_loader = CachedDataLoader(MapDataLoader())
+        print("✓ Map data loader initialized")
+        
+        # Initialize additional loaders with error handling
+        try:
+            glider_grid_loader = GliderGridDataLoader()
+            df_glider_grid = glider_grid_loader.load_data()
+            print("✓ Glider grid data loaded")
+        except Exception as e:
+            print(f"⚠ Warning: Could not load glider grid data: {e}")
+            df_glider_grid = pd.DataFrame()
+        
+        try:
+            mpa_loader = MPADataLoader()
+            df_mpa = mpa_loader.load_data()
+            print("✓ MPA data loaded")
+        except Exception as e:
+            print(f"⚠ Warning: Could not load MPA data: {e}")
+            df_mpa = pd.DataFrame()
+        
+        try:
+            cached_gomofs_loader = CachedDataLoader(gomofsdataloader())
+            print("✓ GOMOFS loader initialized")
+        except Exception as e:
+            print(f"⚠ Warning: Could not initialize GOMOFS loader: {e}")
+            cached_gomofs_loader = None
+        
+        try:
+            cached_doppio_loader = CachedDataLoader(doppiodataloader())
+            print("✓ Doppio loader initialized")
+        except Exception as e:
+            print(f"⚠ Warning: Could not initialize Doppio loader: {e}")
+            cached_doppio_loader = None
+        
+        try:
+            gs = GulfStreamLoader()
+            GulfStreamBounds = gs.load_data()
+            print("✓ Gulf Stream data loaded")
+        except Exception as e:
+            print(f"⚠ Warning: Could not load Gulf Stream data: {e}")
+            GulfStreamBounds = pd.DataFrame()
+        
+        print("✓ All data loaders initialized successfully")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error initializing data loaders: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 glider_ids = ['SN209', 'SN210','SN069','SN203']
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = cast(List[str | Dict[str, Any]], [dbc.themes.FLATLY])
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server # Required for Gunicorn
+
+# Add health check endpoint for deployment monitoring
+@app.server.route('/health')
+def health_check():
+    return {'status': 'healthy', 'timestamp': pd.Timestamp.now().isoformat()}
 
 # non caching approach
 # loader = GliderDataLoader(filenames=['25420901RT.txt', '25520301RT.txt', '25706901RT.txt'])
@@ -462,19 +532,52 @@ server = app.server # Required for Gunicorn
 # df_latest = loader.load_data()
 # map_loader = MapDataLoader()
 # df_map = map_loader.load_data()
-df_latest = cached_loader.get_data()
-df_map = cached_map_loader.get_data()
-station_min, station_max = df_latest["Station"].min(), df_latest["Station"].max()
-date_min, date_max = df_latest["Date"].min(), df_latest["Date"].max() 
-unix_min, unix_max = df_latest["unixTimestamp"].min(), df_latest["unixTimestamp"].max() 
-unix_max_minus_12hrs = unix_max - 60*60*12
-marks = range_slider_marks(df_latest, 20)
-datetime_max = df_latest["Datetime"].max()
-# Need function to replace these!
-utc_str = datetime_max.strftime("%Y-%m-%d %H:%M:%S")
-et_str = datetime_max.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
-pt_str = datetime_max.tz_localize("UTC").tz_convert("US/Pacific").strftime("%Y-%m-%d %H:%M:%S")
-update_str = f'Last Updated: {utc_str} UTC | {et_str} ET | {pt_str} PT'
+
+# Initialize data loaders if not already done
+if cached_loader is None:
+    initialize_data_loaders()
+
+# Get initial data for layout setup
+try:
+    df_latest = cached_loader.get_data() if cached_loader else pd.DataFrame()
+    df_map = cached_map_loader.get_data() if cached_map_loader else pd.DataFrame()
+except Exception as e:
+    print(f"Error loading initial data: {e}")
+    df_latest = pd.DataFrame()
+    df_map = pd.DataFrame()
+# Get data safely for layout setup
+try:
+    if df_latest.empty or df_map.empty:
+        # Set safe defaults if no data
+        station_min, station_max = 0, 1
+        date_min, date_max = pd.Timestamp.now(), pd.Timestamp.now()
+        unix_min, unix_max = 0, 1
+        unix_max_minus_12hrs = 0
+        marks = {0: "No data"}
+        datetime_max = pd.Timestamp.now()
+        update_str = "No data available"
+    else:
+        station_min, station_max = df_latest["Station"].min(), df_latest["Station"].max()
+        date_min, date_max = df_latest["Date"].min(), df_latest["Date"].max() 
+        unix_min, unix_max = df_latest["unixTimestamp"].min(), df_latest["unixTimestamp"].max() 
+        unix_max_minus_12hrs = unix_max - 60*60*12
+        marks = range_slider_marks(df_latest, 20)
+        datetime_max = df_latest["Datetime"].max()
+        # Need function to replace these!
+        utc_str = datetime_max.strftime("%Y-%m-%d %H:%M:%S")
+        et_str = datetime_max.tz_localize("UTC").tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M:%S")
+        pt_str = datetime_max.tz_localize("UTC").tz_convert("US/Pacific").strftime("%Y-%m-%d %H:%M:%S")
+        update_str = f'Last Updated: {utc_str} UTC | {et_str} ET | {pt_str} PT'
+except Exception as e:
+    print(f"Error in layout data setup: {e}")
+    # Set safe defaults on error
+    station_min, station_max = 0, 1
+    date_min, date_max = pd.Timestamp.now(), pd.Timestamp.now()
+    unix_min, unix_max = 0, 1
+    unix_max_minus_12hrs = 0
+    marks = {0: "Error loading data"}
+    datetime_max = pd.Timestamp.now()
+    update_str = "Error loading data"
 app.layout = dbc.Container([
     # Top row - Header
     dbc.Row([
@@ -858,13 +961,36 @@ app.layout = dbc.Container([
 def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected_tab, range_value, selected_layer, selected_cast_direction, property_x, property_y):
     log_memory_usage()
     
+    # Ensure data loaders are initialized
+    if cached_loader is None or cached_map_loader is None:
+        if not initialize_data_loaders():
+            # Return empty figures if initialization fails
+            blank_fig = go.Figure()
+            return (
+                blank_fig, blank_fig, blank_fig,
+                blank_fig, blank_fig, blank_fig,
+                blank_fig, no_update, no_update, no_update, no_update, no_update, no_update,
+                go.Figure(), [], []
+            )
+    
     # Get data filtered by current range slider
-    if range_value and len(range_value) == 2:
-        df_latest = cached_loader.get_data(time_range=range_value)
-        df_map_filtered = cached_map_loader.get_data(time_range=range_value)
-    else:
-        df_latest = cached_loader.get_data()
-        df_map_filtered = cached_map_loader.get_data()
+    try:
+        if range_value and len(range_value) == 2:
+            df_latest = cached_loader.get_data(time_range=range_value)
+            df_map_filtered = cached_map_loader.get_data(time_range=range_value)
+        else:
+            df_latest = cached_loader.get_data()
+            df_map_filtered = cached_map_loader.get_data()
+    except Exception as e:
+        print(f"Error loading data in callback: {e}")
+        # Return empty figures on data loading error
+        blank_fig = go.Figure()
+        return (
+            blank_fig, blank_fig, blank_fig,
+            blank_fig, blank_fig, blank_fig,
+            blank_fig, no_update, no_update, no_update, no_update, no_update, no_update,
+            go.Figure(), [], []
+        )
     
     # Filter glider assets (this is necessary)
     df_latest_filtered = filter_glider_assets(df_latest, glider_overlay)
@@ -1316,49 +1442,63 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         line=dict(width=2, color='deepskyblue'),
         ))
 
-    if 'glider_grid' in map_options:
-        map_fig.add_trace(go.Scattermap(
-            lat=df_glider_grid['Lat'],
-            lon=df_glider_grid['Lon'],
-            mode='markers',
-            name='Glider Grid',
-            marker=dict(size=6, color='black', opacity=0.5),
-            text = df_glider_grid['Grid_ID'],
-            textposition = "bottom right",
-        ))
+    if 'glider_grid' in map_options and df_glider_grid is not None and not df_glider_grid.empty:
+        try:
+            map_fig.add_trace(go.Scattermap(
+                lat=df_glider_grid['Lat'],
+                lon=df_glider_grid['Lon'],
+                mode='markers',
+                name='Glider Grid',
+                marker=dict(size=6, color='black', opacity=0.5),
+                text = df_glider_grid['Grid_ID'],
+                textposition = "bottom right",
+            ))
+        except Exception as e:
+            print(f"Warning: Could not add glider grid to map: {e}")
 
-    if 'mpa' in map_options:
-        map_fig.add_trace(go.Scattermap(
-            lat=df_mpa['Lat'],
-            lon=df_mpa['Lon'],
-            mode='lines',
-            name='Stellwagen Bank MPA',
-            line=dict(width=4, color='red'),
-            text = 'Stellwagen Bank MPA',
-            textposition = "bottom right",
-        ))
-    if 'gomofs' in map_options:
-        gomofshovertext = cached_gomofs_loader.df_gomofs['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-        map_fig.add_trace(go.Scattermap(
-            lat=cached_gomofs_loader.df_gomofs['lat'],
-            lon=cached_gomofs_loader.df_gomofs['lon'],
-            mode='lines+markers',
-            name='gomofs tracks',
-            line=dict(width=2, color='red'),
-            hovertext = gomofshovertext,
-            textposition = "bottom right",
-        ))
-    if 'doppio' in map_options:
-        doppioshovertext = cached_doppio_loader.df_doppio['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-        map_fig.add_trace(go.Scattermap(
-            lat=cached_doppio_loader.df_doppio['lat'],
-            lon=cached_doppio_loader.df_doppio['lon'],
-            mode='lines+markers',
-            name='doppio tracks',
-            line=dict(width=2, color='orange'),
-            hovertext = doppioshovertext,
-            textposition = "bottom right",
-        ))
+    if 'mpa' in map_options and df_mpa is not None and not df_mpa.empty:
+        try:
+            map_fig.add_trace(go.Scattermap(
+                lat=df_mpa['Lat'],
+                lon=df_mpa['Lon'],
+                mode='lines',
+                name='Stellwagen Bank MPA',
+                line=dict(width=4, color='red'),
+                text = 'Stellwagen Bank MPA',
+                textposition = "bottom right",
+            ))
+        except Exception as e:
+            print(f"Warning: Could not add MPA to map: {e}")
+            
+    if 'gomofs' in map_options and cached_gomofs_loader is not None:
+        try:
+            gomofshovertext = cached_gomofs_loader.df_gomofs['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+            map_fig.add_trace(go.Scattermap(
+                lat=cached_gomofs_loader.df_gomofs['lat'],
+                lon=cached_gomofs_loader.df_gomofs['lon'],
+                mode='lines+markers',
+                name='gomofs tracks',
+                line=dict(width=2, color='red'),
+                hovertext = gomofshovertext,
+                textposition = "bottom right",
+            ))
+        except Exception as e:
+            print(f"Warning: Could not add GOMOFS to map: {e}")
+            
+    if 'doppio' in map_options and cached_doppio_loader is not None:
+        try:
+            doppioshovertext = cached_doppio_loader.df_doppio['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+            map_fig.add_trace(go.Scattermap(
+                lat=cached_doppio_loader.df_doppio['lat'],
+                lon=cached_doppio_loader.df_doppio['lon'],
+                mode='lines+markers',
+                name='doppio tracks',
+                line=dict(width=2, color='orange'),
+                hovertext = doppioshovertext,
+                textposition = "bottom right",
+            ))
+        except Exception as e:
+            print(f"Warning: Could not add Doppio to map: {e}")
 
     # map_fig.update_layout(map = {'zoom': 8, 'style': 'satellite', 'center': {'lat': last_ship_lat, 'lon': last_ship_lon}})
     # map_fig.update_traces(marker_symbol=1, selector=dict(name='SPOT01'))
@@ -1631,6 +1771,13 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
 )
 def update_range_slider(glider_overlay, n):
     log_memory_usage()  # Add this line
+    
+    # Ensure data loaders are initialized
+    if cached_map_loader is None:
+        if not initialize_data_loaders():
+            # Return safe defaults if initialization fails
+            return 0, 1, [0, 1], {0: "Init failed"}, "Initialization failed", "No data", "No data", "No data"
+    
     try:
         df_map = cached_map_loader.get_data()
         if df_map.empty:
@@ -1695,4 +1842,18 @@ def log_memory_usage():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))  # Render dynamically assigns a port
+    print(f"Starting Nessie app on port {port}")
+    print("Environment variables:")
+    print(f"  PORT: {os.environ.get('PORT', 'Not set')}")
+    print(f"  PYTHON_VERSION: {os.environ.get('PYTHON_VERSION', 'Not set')}")
+    
+    try:
+        # Try to initialize data loaders
+        if initialize_data_loaders():
+            print("Data loaders initialized successfully")
+        else:
+            print("Warning: Data loaders failed to initialize")
+    except Exception as e:
+        print(f"Error during startup: {e}")
+    
     app.run(host="0.0.0.0", port=str(port), debug=False)
