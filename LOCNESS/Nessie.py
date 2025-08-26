@@ -437,7 +437,7 @@ def range_slider_marks(df, target_mark_count=10):
 
     return marks
 # Create cached versions
-cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt'],
+cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25706901RT.txt', '25720901RT.txt', '25821001RT.txt', '25820301RT.txt'],
     sample_rate=3, include_qc=False, range_start=None, range_end=None))
 cached_map_loader = CachedDataLoader(MapDataLoader())
 glider_grid_loader = GliderGridDataLoader()
@@ -448,7 +448,7 @@ cached_gomofs_loader = CachedDataLoader(gomofsdataloader())
 cached_doppio_loader = CachedDataLoader(doppiodataloader())
 gs = GulfStreamLoader()
 GulfStreamBounds = gs.load_data()
-glider_ids = ['SN209', 'SN210','SN069']
+glider_ids = ['SN209', 'SN210','SN069','SN203']
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = cast(List[str | Dict[str, Any]], [dbc.themes.FLATLY])
@@ -904,6 +904,7 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     # Dataframes for map plot
     ship_mask = df_map_filtered['Cruise'] == "RV Connecticut"
     lrauv_mask = df_map_filtered['Platform'] == "LRAUV"
+    sn203_mask = (df_map_filtered['Cruise'] == "25820301") & (df_map_filtered['Layer'] != 'WPT')
     sn209_mask = (df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] != 'WPT')
     sn210_mask = (df_map_filtered['Cruise'] == "25821001") & (df_map_filtered['Layer'] != 'WPT')
     sn069_mask = (df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] != 'WPT')
@@ -971,6 +972,13 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         last_glider_lon_SN069 = []
         next_glider_lat_SN069 = []
         next_glider_lon_SN069 = []
+    # Last Glider Location SN203
+    if len(df_map_filtered.loc[sn203_mask]) > 0:
+        last_glider_lat_SN203 = np.array(df_map_filtered.loc[sn203_mask, 'lat'])[-1]
+        last_glider_lon_SN203 = np.array(df_map_filtered.loc[sn203_mask, 'lon'])[-1]
+    else:
+        last_glider_lat_SN203 = []
+        last_glider_lon_SN203 = []
     map_fig = go.Figure()
     # Set hard color limits for pHin and rhodamine
     if selected_parameter == 'pHin' and selected_layer == 'Surface':
@@ -1099,11 +1107,23 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             size=10, 
             color=df_map_filtered.loc[sn209_mask, selected_parameter],
             colorscale=cscale,
-            showscale=False,
-            cmin=cmin,
-            cmax=cmax,
-        ),
-        ))
+            showscale=True,
+            colorbar=dict(
+                    len=0.6,              # length of colorbar
+                    thickness=15,         # width (since vertical)
+                    tickvals=tickvals,
+                    ticktext=ticktext,
+                    x=0.5,               # near the right edge of the plot, 0.98 v
+                    y=0.05,                # center vertically, 0.5 v
+                    xanchor='center',      # anchor the right side of the bar to right v
+                    yanchor='bottom',     # anchor the middle vertically, 
+                    orientation='h'     # optional, vertical is default
+                    ),
+                    cmin=cmin,
+                    cmax=cmax,
+                ),
+            ),
+        )
         map_fig.add_trace(go.Scattermap(
         lat=[next_glider_lat_SN209],
         lon=[next_glider_lon_SN209],
@@ -1223,6 +1243,38 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             mode='markers',
             name='SN069 Last Location',
             hovertext=sn069_hovertext_last,
+            marker=dict(
+                size=10,
+                symbol='airport',
+                showscale=False,
+            ),
+            showlegend=False
+        ))
+    # Set hovertext for SN203 based on selected parameter
+    if len(df_map_filtered.loc[sn203_mask]) > 0:
+        sn203_hovertext = df_map_filtered.loc[sn203_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[sn203_mask, selected_parameter]
+        sn203_hovertext_last = np.array(sn203_hovertext)[-1]
+        map_fig.add_trace(go.Scattermap(
+            lat=df_map_filtered.loc[sn203_mask, 'lat'],
+            lon=df_map_filtered.loc[sn203_mask, 'lon'],
+            mode='markers',
+            name='SN203',
+            hovertext=sn203_hovertext,
+            marker=dict(
+                size=10,
+                color=df_map_filtered.loc[sn203_mask, selected_parameter],
+                colorscale=cscale,
+                showscale=False,
+                cmin=cmin,
+                cmax=cmax,
+            ),
+        ))
+        map_fig.add_trace(go.Scattermap(
+            lat=[last_glider_lat_SN203],
+            lon=[last_glider_lon_SN203],
+            mode='markers',
+            name='SN203 Last Location',
+            hovertext=sn203_hovertext_last,
             marker=dict(
                 size=10,
                 symbol='airport',
