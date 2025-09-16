@@ -458,7 +458,7 @@ def initialize_data_loaders():
         print("Initializing data loaders...")
         
         # Initialize core loaders first
-        cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25820301RT.txt'], # '25706901RT.txt', '25720901RT.txt', '25821001RT.txt', 
+        cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25820301RT.txt','25921101RT.txt'], # '25706901RT.txt', '25720901RT.txt', '25821001RT.txt', 
             sample_rate=3, include_qc=False, range_start=None, range_end=None))
         print("✓ Glider data loader initialized")
         
@@ -513,7 +513,7 @@ def initialize_data_loaders():
         traceback.print_exc()
         return False
 
-glider_ids = ['SN203'] # 'SN209', 'SN210','SN069',
+glider_ids = ['SN203','SN211'] # 'SN209', 'SN210','SN069',
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = cast(List[str | Dict[str, Any]], [dbc.themes.FLATLY])
@@ -1037,6 +1037,8 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     sn209_nxt_mask = (df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] == 'WPT')
     sn210_nxt_mask = (df_map_filtered['Cruise'] == "25821001") & (df_map_filtered['Layer'] == 'WPT')
     sn069_nxt_mask = (df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] == 'WPT')
+    sn211_mask = (df_map_filtered['Cruise'] == "25921101") & (df_map_filtered['Layer'] != 'WPT')
+    sn211_nxt_mask = (df_map_filtered['Cruise'] == "25921101") & (df_map_filtered['Layer'] == 'WPT')
 
     #  Weird issue with wpt when range slider is adjusted
     # Handle empty DataFrame case
@@ -1105,6 +1107,17 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
     else:
         last_glider_lat_SN203 = []
         last_glider_lon_SN203 = []
+    # Last Glider Location SN211
+    if len(df_map_filtered.loc[sn211_mask]) > 0:
+        last_glider_lat_SN211 = np.array(df_map_filtered.loc[sn211_mask, 'lat'])[-1]
+        last_glider_lon_SN211 = np.array(df_map_filtered.loc[sn211_mask, 'lon'])[-1]
+        next_glider_lat_SN211 = np.array(df_map_filtered.loc[sn211_nxt_mask, 'lat'])[-1]
+        next_glider_lon_SN211 = np.array(df_map_filtered.loc[sn211_nxt_mask, 'lon'])[-1]
+    else:
+        last_glider_lat_SN211 = []
+        last_glider_lon_SN211 = []
+        next_glider_lat_SN211 = []
+        next_glider_lon_SN211 = []
     map_fig = go.Figure()
     # Set hard color limits for pHin and rhodamine
     if selected_parameter == 'pHin' and selected_layer == 'Surface':
@@ -1401,6 +1414,38 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             mode='markers',
             name='SN203 Last Location',
             hovertext=sn203_hovertext_last,
+            marker=dict(
+                size=10,
+                symbol='airport',
+                showscale=False,
+            ),
+            showlegend=False
+        ))
+    # Set hovertext for SN211 based on selected parameter
+    if len(df_map_filtered.loc[sn211_mask]) > 0:
+        sn211_hovertext = df_map_filtered.loc[sn211_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[sn211_mask, selected_parameter]
+        sn211_hovertext_last = np.array(sn211_hovertext)[-1]
+        map_fig.add_trace(go.Scattermap(
+            lat=df_map_filtered.loc[sn211_mask, 'lat'],
+            lon=df_map_filtered.loc[sn211_mask, 'lon'],
+            mode='markers',
+            name='SN211',
+            hovertext=sn211_hovertext,
+            marker=dict(
+                size=10,
+                color=df_map_filtered.loc[sn211_mask, selected_parameter],
+                colorscale=cscale,
+                showscale=False,
+                cmin=cmin,
+                cmax=cmax,
+            ),
+        ))
+        map_fig.add_trace(go.Scattermap(
+            lat=[last_glider_lat_SN211],
+            lon=[last_glider_lon_SN211],
+            mode='markers',
+            name='SN211 Last Location',
+            hovertext=sn211_hovertext_last,
             marker=dict(
                 size=10,
                 symbol='airport',
