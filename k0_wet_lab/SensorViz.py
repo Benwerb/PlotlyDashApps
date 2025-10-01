@@ -9,101 +9,50 @@ import numpy as np
 # from sklearn.preprocessing import MinMaxScaler
 
 # Hardcode path to files and create list
-folder_path = r"\\atlas.shore.mbari.org\ProjectLibrary\901805_Coastal_Biogeochemical_Sensing\Wetlab_Sensor_Calibration\NanoFet\k0"
+folder_path = r"\\atlas.shore.mbari.org\ProjectLibrary\901805_Coastal_Biogeochemical_Sensing\Wetlab_Sensor_Calibration\NanoFet\K0"
 
-files = [f for f in os.listdir(folder_path) if '.csv']
+files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
 
-# Parse metadata from the first CSV file
-def parse_metadata(folder_path):
+# Get sensor IDs from the data file
+def get_sensor_ids(folder_path, selected_file=None):
     """
-    Parse metadata about COM ports and NanoFet IDs
+    Get unique sensor IDs from the CSV file
     Returns:
-    - com_dict: Dictionary mapping COM ports to NanoFet IDs
-    - nanofet_ids: List of NanoFet IDs
-    - com_ports: List of corresponding COM ports
+    - sensor_ids: List of unique sensor IDs
     """
-    filename = os.path.join(folder_path, files[-1])
-    with open(filename, 'r') as f:
-        # Read first few lines to extract metadata
-        metadata_lines = [next(f).strip() for _ in range(3)]
-    
-    # Parse COM ports and NanoFet IDs
-    com_ports = []
-    nanofet_ids = []
-    
-    for line in metadata_lines:
-        if line.startswith('NanoFetIDs:'):
-            nanofet_ids = [id.strip() for id in line.split(':')[1].split(';')]
-        elif line.startswith('NanoFets:'):
-            com_ports = [port.strip() for port in line.split(':')[1].split(';')]
-    
-    # Create mapping between COM ports and NanoFet IDs
-    com_dict = dict(zip(com_ports, nanofet_ids))
-    
-    return com_dict, nanofet_ids, com_ports
+    filename = os.path.join(folder_path, selected_file if selected_file else files[-1])
+    df = pd.read_csv(filename)
+    sensor_ids = df['SensorID'].unique().tolist()
+    return sensor_ids
 
 # Load and clean data
-def load_latest_data(folder_path, selected_file=None, com_dict=None):
+def load_latest_data(folder_path, selected_file=None):
     """Loads the latest CSV file, cleans it, and returns a DataFrame."""
     filename = os.path.join(folder_path, selected_file if selected_file else files[-1])
-    df = pd.read_csv(filename, delimiter=",", skiprows=4)
+    df = pd.read_csv(filename)
     
-    # Clean data
-    # df['DateTime'] = pd.to_datetime(df['DateTime'], format='%Y-%m-%d %H:%M')
-    
-    # Replace COM with NanoFet ID if metadata is available
-    if com_dict:
-        df['NanoFet'] = df['COM'].map(com_dict)
+    # Convert DateTime to datetime if needed
+    df['DateTime'] = pd.to_datetime(df['DateTime'])
     
     return df
 
-# Parse initial metadata
-com_dict, nanofet_ids, com_ports = parse_metadata(folder_path)
+# Get initial sensor IDs
+sensor_ids = get_sensor_ids(folder_path)
 
 # Initial data load
-df = load_latest_data(folder_path, com_dict=com_dict)
+df = load_latest_data(folder_path)
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = [dbc.themes.CERULEAN]
 app = Dash(__name__, external_stylesheets=external_stylesheets,
            meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}])
 
-# Dynamically create layout based on number of NanoFets
-def create_layout(nanofet_ids, df):
+# Dynamically create layout with fixed 4 sensor plots
+def create_layout(df):
     """
-    Dynamically create app layout based on number of NanoFets
+    Create fixed layout with exactly 4 sensor plots plus magnitude comparison
     """
-    # Determine number of columns based on number of NanoFets
-    num_nanofets = len(nanofet_ids)
-    cols_per_row = 2  # Can be adjusted
-    rows = (num_nanofets + cols_per_row - 1) // cols_per_row
-
-    # Create graph rows dynamically
-    graph_rows = []
-    for r in range(rows):
-        row_cols = []
-        for c in range(cols_per_row):
-            idx = r * cols_per_row + c
-            if idx < num_nanofets:
-                nanofet = nanofet_ids[idx]
-                col = dbc.Col([
-                    dcc.Graph(id=f'scatter-plot-{nanofet}', 
-                              style={'height': 'auto', 'width': 'auto'}),
-                ], width=6)
-                row_cols.append(col)
-        graph_rows.append(dbc.Row(row_cols))
-
-    # Magnitude comparison plot row
-    graph_rows.append(
-        dbc.Row([
-            dbc.Col([
-                dcc.Graph(id='magnitude-comparison-plot', 
-                          style={'height': 'auto', 'width': 'auto'}),
-            ], width=12)
-        ])
-    )
-
-    # Full layout
+    # Fixed layout with 4 sensor plots in 2x2 grid
     layout = dbc.Container([
         dbc.Row([html.H3('WetViz', className="text-primary text-center")]),
 
@@ -114,7 +63,31 @@ def create_layout(nanofet_ids, df):
             ], width=3)
         ], className="mb-3"),
 
-        *graph_rows,  # Unpack dynamic graph rows
+        # Fixed 2x2 grid for sensor plots
+        dbc.Row([
+            dbc.Col([
+                dcc.Graph(id='sensor-plot-1', style={'height': '400px'}),
+            ], width=6),
+            dbc.Col([
+                dcc.Graph(id='sensor-plot-2', style={'height': '400px'}),
+            ], width=6)
+        ]),
+        
+        dbc.Row([
+            dbc.Col([
+                dcc.Graph(id='sensor-plot-3', style={'height': '400px'}),
+            ], width=6),
+            dbc.Col([
+                dcc.Graph(id='sensor-plot-4', style={'height': '400px'}),
+            ], width=6)
+        ]),
+
+        # Magnitude comparison plot
+        dbc.Row([
+            dbc.Col([
+                dcc.Graph(id='magnitude-comparison-plot', style={'height': '400px'}),
+            ], width=12)
+        ]),
 
         dbc.Row([
             dbc.Col(dbc.Card([
@@ -122,7 +95,7 @@ def create_layout(nanofet_ids, df):
                     html.Label("Select X-axis:"),
                     dcc.Dropdown(
                         id='x-axis-dropdown', 
-                        options=[{'label': col, 'value': col} for col in df.columns if col not in ['COM', 'NanoFet']],
+                        options=[{'label': col, 'value': col} for col in df.columns if col not in ['COM', 'SensorID']],
                         value="DateTime", 
                         clearable=False)
                 ])
@@ -133,7 +106,7 @@ def create_layout(nanofet_ids, df):
                     html.Label("Select Y-axis:"),
                     dcc.Dropdown(
                         id='y-axis-dropdown', 
-                        options=[{'label': col, 'value': col} for col in df.columns if col not in ['COM', 'NanoFet']],
+                        options=[{'label': col, 'value': col} for col in df.columns if col not in ['COM', 'SensorID']],
                         value="Vrse", 
                         clearable=False)
                 ])
@@ -143,64 +116,78 @@ def create_layout(nanofet_ids, df):
 
     return layout
 
-# Set the app layout dynamically
-app.layout = create_layout(nanofet_ids, df)
+# Set the app layout with fixed 4 plots
+app.layout = create_layout(df)
 
-# Create dynamic callback for multiple NanoFet graphs
-def create_multi_output_callback(nanofet_ids):
-    """
-    Dynamically create callback outputs for multiple NanoFet graphs
-    """
-    @callback(
-        [Output(f'scatter-plot-{nanofet}', 'figure') for nanofet in nanofet_ids] + 
-        [Output('magnitude-comparison-plot', 'figure')],
-        [Input('Deployment-Dropdown', 'value'),
-         Input('x-axis-dropdown','value'),
-         Input('y-axis-dropdown', 'value')]
-    )
-    def update_graphs(selected_file, x_column, y_column):
-        # Re-parse metadata and load data each time to handle dynamic changes
-        current_com_dict, current_nanofet_ids, _ = parse_metadata(folder_path)
-        
-        # Load data with NanoFet ID mapping
-        df = load_latest_data(folder_path, selected_file, current_com_dict)
-        
-        # Create plots for each NanoFet
-        figures = []
-        for nanofet in current_nanofet_ids:
-            df_nanofet = df[df['NanoFet'] == nanofet]
+# Create single callback for all plots
+@callback(
+    [Output('sensor-plot-1', 'figure'),
+     Output('sensor-plot-2', 'figure'),
+     Output('sensor-plot-3', 'figure'),
+     Output('sensor-plot-4', 'figure'),
+     Output('magnitude-comparison-plot', 'figure')],
+    [Input('Deployment-Dropdown', 'value'),
+     Input('x-axis-dropdown','value'),
+     Input('y-axis-dropdown', 'value')]
+)
+def update_all_plots(selected_file, x_column, y_column):
+    """Update all plots with data from selected file"""
+    # Get current sensor IDs and load data
+    current_sensor_ids = get_sensor_ids(folder_path, selected_file)
+    df = load_latest_data(folder_path, selected_file)
+    
+    # Create plots for each sensor slot (up to 4)
+    figures = []
+    for i in range(4):
+        if i < len(current_sensor_ids):
+            # Sensor exists in current file
+            sensor = current_sensor_ids[i]
+            df_sensor = df[df['SensorID'] == sensor]
             
             fig = px.scatter(
-                df_nanofet, 
+                df_sensor, 
                 x=x_column, 
                 y=y_column, 
-                title=f'{nanofet}: {x_column} vs. {y_column}',
+                title=f'{sensor}: {x_column} vs. {y_column}',
                 labels={x_column: x_column, y_column: y_column}
             )
-            figures.append(fig)
-        
-        # Create magnitude comparison plot
-        magnitude_fig = create_magnitude_comparison(df, y_column, nanofet_ids)
-        figures.append(magnitude_fig)
-        
-        return figures
+        else:
+            # No sensor for this slot
+            fig = go.Figure()
+            fig.update_layout(
+                title=f'Sensor Slot {i+1}: No data available',
+                xaxis_title=x_column,
+                yaxis_title=y_column,
+                annotations=[{
+                    'text': 'No sensor data for this slot',
+                    'x': 0.5, 'y': 0.5,
+                    'xref': 'paper', 'yref': 'paper',
+                    'showarrow': False,
+                    'font': {'size': 16}
+                }]
+            )
+        figures.append(fig)
+    
+    # Create magnitude comparison plot
+    magnitude_fig = create_magnitude_comparison(df, y_column, current_sensor_ids)
+    figures.append(magnitude_fig)
+    
+    return figures
 
-    return update_graphs
-
-def create_magnitude_comparison(df, y_column, nanofet_ids):
+def create_magnitude_comparison(df, y_column, sensor_ids):
     """
-    Create an offset comparison plot to compare magnitude of Vrse changes across all NanoFets
+    Create an offset comparison plot to compare magnitude of Vrse changes across all sensors
     """
     # Prepare figure
     fig = go.Figure()
     
-    # Apply offset for each NanoFet to align starting points
-    for nanofet in nanofet_ids:
-        df_nanofet = df[df['NanoFet'] == nanofet].sort_values('DateTime')  # Sort by DateTime
+    # Apply offset for each sensor to align starting points
+    for sensor in sensor_ids:
+        df_sensor = df[df['SensorID'] == sensor].sort_values('DateTime')  # Sort by DateTime
         
         # x_data is always DateTime (no conversion needed)
-        x_data = df_nanofet['DateTime']
-        y_data = pd.to_numeric(df_nanofet[y_column], errors='coerce')
+        x_data = df_sensor['DateTime']
+        y_data = pd.to_numeric(df_sensor[y_column], errors='coerce')
         
         # Only process if we have data
         if not x_data.empty and not y_data.empty:
@@ -211,12 +198,12 @@ def create_magnitude_comparison(df, y_column, nanofet_ids):
             
             y_offset = y_data + offset  # Apply offset to align starting points
             
-            # Add trace for this NanoFet
+            # Add trace for this sensor
             fig.add_trace(go.Scatter(
                 x=x_data, 
                 y=y_offset,
                 mode='markers+lines',  # Add lines to better see trends
-                name=nanofet,
+                name=sensor,
                 opacity=0.7
             ))
     
@@ -225,13 +212,10 @@ def create_magnitude_comparison(df, y_column, nanofet_ids):
         title=f'Magnitude Comparison (Offset-Aligned): DateTime vs. {y_column}',
         xaxis_title='DateTime',
         yaxis_title=f'{y_column} (Offset-Aligned)',
-        legend_title_text='NanoFet IDs'
+        legend_title_text='Sensor IDs'
     )
     
     return fig
-
-# Apply the dynamic callback
-app.callback = create_multi_output_callback(nanofet_ids)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8050)
