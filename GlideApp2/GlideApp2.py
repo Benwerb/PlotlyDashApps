@@ -798,6 +798,34 @@ app.layout = dbc.Container([
     ]),
 ], fluid=True, className='dashboard-container')
 
+# --- Callback to refresh mission dropdown options on interval ---
+@app.callback(
+    Output('mission-dropdown', 'options'),
+    [Input('interval-refresh', 'n_intervals')]
+)
+def refresh_mission_dropdown(n):
+    """
+    Periodically refresh the mission dropdown options to show new missions.
+    This ensures new data in the database is reflected in the UI.
+    """
+    try:
+        # Fetch fresh metadata from database
+        fresh_metadata = get_mission_metadata()
+        
+        # Create updated dropdown options with date ranges
+        updated_options = [
+            {
+                'label': f"{row['mission_id']} ({row['start_date'].strftime('%m/%d/%y')} - {row['end_date'].strftime('%m/%d/%y')}, {int(row['total_dives'])} dives)",
+                'value': row['mission_id']
+            }
+            for _, row in fresh_metadata.iterrows()
+        ]
+        return updated_options
+    except Exception as e:
+        print(f"Error refreshing mission dropdown: {e}")
+        # Return existing options as fallback
+        return mission_dropdown_options
+
 # --- Callback to update RangeSlider and mission info when mission changes ---
 @app.callback(
     [Output('RangeSlider', 'min'),
@@ -825,20 +853,25 @@ def update_range_slider_and_info(selected_mission):
     # Default value: last 10 dives (but user can drag slider to see all)
     default_min = max(min_dive, max_dive - 10)
     
-    # Get mission metadata for display
-    mission_meta = missions_metadata[missions_metadata['mission_id'] == selected_mission]
-    if len(mission_meta) > 0:
-        meta = mission_meta.iloc[0]
-        mission_info = html.Div([
-            html.Strong("Mission Details:"),
-            html.Br(),
-            html.Span(f"📅 Start: {meta['start_date'].strftime('%Y-%m-%d %H:%M')}"),
-            html.Br(),
-            html.Span(f"📅 End: {meta['end_date'].strftime('%Y-%m-%d %H:%M')}"),
-            html.Br(),
-            html.Span(f"🌊 Total Dives: {int(meta['total_dives'])}"),
-        ])
-    else:
+    # Get FRESH mission metadata for display (don't use stale global variable)
+    try:
+        fresh_metadata = get_mission_metadata()
+        mission_meta = fresh_metadata[fresh_metadata['mission_id'] == selected_mission]
+        if len(mission_meta) > 0:
+            meta = mission_meta.iloc[0]
+            mission_info = html.Div([
+                html.Strong("Mission Details:"),
+                html.Br(),
+                html.Span(f"📅 Start: {meta['start_date'].strftime('%Y-%m-%d %H:%M')}"),
+                html.Br(),
+                html.Span(f"📅 End: {meta['end_date'].strftime('%Y-%m-%d %H:%M')}"),
+                html.Br(),
+                html.Span(f"🌊 Total Dives: {int(meta['total_dives'])}"),
+            ])
+        else:
+            mission_info = f"Mission: {selected_mission}"
+    except Exception as e:
+        print(f"Error fetching mission metadata: {e}")
         mission_info = f"Mission: {selected_mission}"
     
     # Return: slider_min, slider_max, slider_value [start, end], mission_info
