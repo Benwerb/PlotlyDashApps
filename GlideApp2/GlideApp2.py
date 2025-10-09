@@ -689,6 +689,20 @@ app.layout = dbc.Container([
         dcc.Tab(label='pH Drift', value='tab-ph-drift', children=[
             dbc.Row([
                 dbc.Col([
+                    html.Label('Select Depth (m):', style={'fontWeight': 'bold', 'fontSize': '14px', 'marginBottom': '5px'}),
+                    dcc.Slider(
+                        id='ph-drift-depth-dropdown',
+                        min=0,
+                        max=1000,
+                        step=10,
+                        value=450,  # Default to 450 m
+                        marks={i: f'{i}m' for i in range(0, 1001, 100)},
+                        tooltip={"placement": "bottom", "always_visible": True}
+                    )
+                ], xs=12, sm=12, md=12, lg=12, xl=12, style={'marginBottom': '20px', 'padding': '10px'})
+            ]),
+            dbc.Row([
+                dbc.Col([
                     dcc.Graph(id='ph-drift-plot', style={'height': '60vh', 'minHeight': '300px', 'width': '100%'})
                 ], xs=12, sm=12, md=12,  lg=12, xl=12)
             ])
@@ -907,9 +921,10 @@ def update_range_slider_and_info(selected_mission):
     #  Input('RangeSlider', 'value'),
     Input('property-x-dropdown', 'value'),
     Input('property-y-dropdown', 'value'),
+    Input('ph-drift-depth-dropdown', 'value'),
     ]
 )
-def update_all_figs(n, selected_mission, range_slider_value, selected_tab, property_x, property_y):
+def update_all_figs(n, selected_mission, range_slider_value, selected_tab, property_x, property_y, ph_drift_depth):
     # Load glider and filter by selected gliders
     min_dive = int(range_slider_value[0])
     max_dive = int(range_slider_value[1])
@@ -919,7 +934,7 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
     try:
         df_latest = get_dives_data(selected_mission, min_dive=min_dive, max_dive=max_dive)
         df_map = get_map_data(selected_mission, min_dive=min_dive, max_dive=max_dive)
-        df_ph_drift = get_ph_drift_data(selected_mission)
+        df_ph_drift = get_ph_drift_data(selected_mission, depth=ph_drift_depth)
     except Exception as e:
         print(f"Error loading data: {e}")
         df_latest = pd.DataFrame()
@@ -1108,7 +1123,7 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
         scatter_fig_ph_drift = make_depth_scatter_plot(
             df_ph_drift,
             x="divenumber", y="ph-delta",
-            title="ΔpHinsitu[Total] (pHin - pHinCanyonB) 450m vs. Depth"
+            title=f"ΔpHinsitu[Total] (pHin - pHinCanyonB) at {ph_drift_depth}m vs. Dive Number"
         )
         scatter_fig_vrs = make_depth_line_plot(
             df_latest,
