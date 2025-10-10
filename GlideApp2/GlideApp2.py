@@ -945,14 +945,20 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
     if len(df_map) > 0 and 'unixtime' in df_map.columns:
         unix_vals_map = df_map['unixtime'].values
         datetimes_map = df_map['datetime'].dt.strftime('%m/%d %H:%M').values if 'datetime' in df_map.columns else df_map['unixtime'].values
+        
+        # Ensure unix_vals_map and datetimes_map have the same length
+        min_len_map = min(len(unix_vals_map), len(datetimes_map))
+        unix_vals_map = unix_vals_map[:min_len_map]
+        datetimes_map = datetimes_map[:min_len_map]
     else:
         unix_vals_map = np.array([])
         datetimes_map = np.array([])
+        min_len_map = 0
 
     # Choose evenly spaced ticks for map colorbar
     n_ticks_map = 5
-    if len(unix_vals_map) > n_ticks_map:
-        idxs_map = np.linspace(0, len(unix_vals_map) - 1, n_ticks_map, dtype=int)
+    if min_len_map > n_ticks_map:
+        idxs_map = np.linspace(0, min_len_map - 1, n_ticks_map, dtype=int)
         tickvals_map = unix_vals_map[idxs_map]
         ticktext_map = datetimes_map[idxs_map]
     else:
@@ -1166,10 +1172,15 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
             unix_vals = df_latest['unixtime'].values
             datetimes = df_latest['datetime'].dt.strftime('%m/%d %H:%M').values if 'datetime' in df_latest.columns else df_latest['unixtime'].values
 
+            # Ensure unix_vals and datetimes have the same length
+            min_len = min(len(unix_vals), len(datetimes))
+            unix_vals = unix_vals[:min_len]
+            datetimes = datetimes[:min_len]
+
             # Choose evenly spaced indices
             n_ticks = 5
-            if len(unix_vals) > n_ticks:
-                idxs = np.linspace(0, len(unix_vals) - 1, n_ticks, dtype=int)
+            if min_len > n_ticks:
+                idxs = np.linspace(0, min_len - 1, n_ticks, dtype=int)
                 tickvals = unix_vals[idxs]
                 ticktext = datetimes[idxs]
             else:
