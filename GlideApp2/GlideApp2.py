@@ -924,7 +924,7 @@ app.layout = dbc.Container([
             dbc.Row([
                 dbc.Col([
                     html.Label('Select X-axis:'),
-                    dcc.Dropdown(id='property-x-dropdown',value='phin'),
+                    dcc.Dropdown(id='property-x-dropdown'),
                 ], xs=12, sm=12, md=3, lg=3, xl=3),
                 dbc.Col([
                     html.Label('Select Y-axis:'),
