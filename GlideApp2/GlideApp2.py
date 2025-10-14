@@ -392,6 +392,115 @@ def range_slider_marks(df, target_mark_count=10):
 
     return marks
 
+def make_contour_plot(df, z_column, title=None):
+    """
+    Create a contour plot of datetime vs depth with the specified z-column as contours.
+
+    Parameters:
+    ----------
+    df : DataFrame
+        Input data with 'datetime', 'depth', and z_column columns.
+    z_column : str
+        Column name for the contour values.
+    title : str or None
+        Plot title. If None, a default is generated.
+
+    Returns:
+    -------
+    fig : plotly.graph_objects.Figure
+        Styled contour plot. Returns empty figure with message if columns missing.
+    """
+    # Check if required columns exist
+    if 'datetime' not in df.columns or 'depth' not in df.columns or z_column not in df.columns:
+        fig = go.Figure()
+        missing_cols = []
+        if 'datetime' not in df.columns:
+            missing_cols.append('datetime')
+        if 'depth' not in df.columns:
+            missing_cols.append('depth')
+        if z_column not in df.columns:
+            missing_cols.append(z_column)
+        
+        fig.add_annotation(
+            text=f"Missing data columns: {', '.join(missing_cols)}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=14, color="gray")
+        )
+        return fig
+    
+    # Filter out rows where required columns are NaN
+    df_valid = df.dropna(subset=['datetime', 'depth', z_column])
+    
+    if len(df_valid) == 0:
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"No valid data for {z_column} contour plot",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=14, color="gray")
+        )
+        return fig
+    
+    if title is None:
+        title = f"{z_column} vs. Time and Depth"
+    
+    try:
+        # Create contour plot using plotly
+        fig = go.Figure()
+        
+        # Add contour plot
+        fig.add_trace(go.Contour(
+            x=df_valid['datetime'],
+            y=df_valid['depth'],
+            z=df_valid[z_column],
+            colorscale='Viridis',
+            line_smoothing=0.85,
+            contours=dict(
+                showlines=True,
+                showlabels=True,
+                labelfont=dict(size=12, color="white")
+            )
+        ))
+        
+        # Update layout
+        fig.update_layout(
+            title=title,
+            xaxis_title="Time",
+            yaxis_title="Depth (m)",
+            yaxis=dict(autorange="reversed"),  # Reverse depth axis so surface is at top
+            template='plotly_white',
+            coloraxis_colorbar=dict(
+                title=z_column,
+                orientation='v',
+                len=0.8,
+                thickness=25,
+                x=1.02,
+                y=0.5
+            )
+        )
+        
+        # Format x-axis to show dates nicely
+        fig.update_xaxes(
+            tickformat='%m/%d %H:%M',
+            tickangle=45
+        )
+        
+    except Exception as e:
+        print(f"Error creating contour plot: {e}")
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Error creating contour plot: {str(e)}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=14, color="red")
+        )
+    
+    return fig
+
 def get_latest_divenumber() -> int | None:
     """
     Fetch the latest (maximum) divenumber from public.real_time_binned using DATABASE_URL.
@@ -453,10 +562,15 @@ default_slider_min = max(station_min, station_max - 10)
 default_slider_max = station_max
 
 # Load the most recent mission data (only last 10 dives for initial display)
+# Use minimal columns for initial load - will be optimized per tab in callback
+initial_columns = ['divenumber', 'depth', 'unixtime', 'phin', 'phin_canb', 'tc', 'psal', 'doxy', 'sigma', 'vrse', 'vrse_std', 'vk', 'vk_std', 'ik', 'ib']
+map_columns = ['lat', 'lon', 'unixtime', 'divenumber', 'depth']
+ph_drift_columns = ['divenumber', 'phin', 'phin_canb', 'unixtime', 'depth']
+
 try:
-    df_latest = get_dives_data(default_mission)
-    df_map = get_map_data(default_mission, depth=0)
-    df_ph_drift = get_ph_drift_data(default_mission, depth=450)
+    df_latest = get_dives_data(default_mission, columns=initial_columns)
+    df_map = get_map_data(default_mission, depth=0, columns=map_columns)
+    df_ph_drift = get_ph_drift_data(default_mission, depth=450, columns=ph_drift_columns)
 except Exception as e:
     print(f"Error loading initial data: {e}")
     df_latest = pd.DataFrame()
@@ -791,12 +905,26 @@ app.layout = dbc.Container([
                 ], xs=12, sm=12, md=12, lg=4, xl=4),
             ]),
         ]),
+        # --- Contour Plot Tab ---
+        dcc.Tab(label='Contour Plot', value='tab-contour', children=[
+            dbc.Row([
+                dbc.Col([
+                    html.Label('Select Z-axis Variable:'),
+                    dcc.Dropdown(id='contour-z-dropdown', value='phin'),
+                ], xs=12, sm=12, md=12, lg=12, xl=12, style={'marginBottom': '20px', 'padding': '10px'}),
+            ], className='mb-3'),
+            dbc.Row([
+                dbc.Col([
+                    dcc.Graph(id='contour-plot', style={'height': '60vh', 'minHeight': '300px', 'width': '100%'})
+                ], xs=12, sm=12, md=12, lg=12, xl=12)
+            ])
+        ]),
         # --- Property Plot Tab ---
         dcc.Tab(label='Property Plot', value='tab-property', children=[
             dbc.Row([
                 dbc.Col([
                     html.Label('Select X-axis:'),
-                    dcc.Dropdown(id='property-x-dropdown'),
+                    dcc.Dropdown(id='property-x-dropdown',value='phin'),
                 ], xs=12, sm=12, md=3, lg=3, xl=3),
                 dbc.Col([
                     html.Label('Select Y-axis:'),
@@ -907,9 +1035,11 @@ def update_range_slider_and_info(selected_mission):
      Output('vk-std-plot', 'figure'),
      Output('ik-plot', 'figure'),
      Output('ib-plot', 'figure'),
-     Output('property-plot', 'figure'),  # New output for property plot
-     Output('property-x-dropdown', 'options'), # New output for x dropdown options
-     Output('property-y-dropdown', 'options')  # New output for y dropdown options
+     Output('contour-plot', 'figure'),  # New output for contour plot
+     Output('contour-z-dropdown', 'options'), # New output for contour z dropdown options
+     Output('property-plot', 'figure'),  # Property plot output
+     Output('property-x-dropdown', 'options'), # Property plot x dropdown options
+     Output('property-y-dropdown', 'options')  # Property plot y dropdown options
     ],
     [Input('interval-refresh', 'n_intervals'),
     Input('mission-dropdown', 'value'),
@@ -919,22 +1049,56 @@ def update_range_slider_and_info(selected_mission):
     #  Input('glider_overlay_checklist', 'value'),
      Input('lazy-tabs', 'value'),
     #  Input('RangeSlider', 'value'),
+    Input('contour-z-dropdown', 'value'),
     Input('property-x-dropdown', 'value'),
     Input('property-y-dropdown', 'value'),
     Input('ph-drift-depth-dropdown', 'value'),
     ]
 )
-def update_all_figs(n, selected_mission, range_slider_value, selected_tab, property_x, property_y, ph_drift_depth):
+def update_all_figs(n, selected_mission, range_slider_value, selected_tab, contour_z, property_x, property_y, ph_drift_depth):
     # Load glider and filter by selected gliders
     min_dive = int(range_slider_value[0])
     max_dive = int(range_slider_value[1])
-    print(f"Mission: {selected_mission}, Range: {min_dive} to {max_dive}")
+    # print(f"Mission: {selected_mission}, Range: {min_dive} to {max_dive}")
     
-    # Load data with error handling
+    # Define columns needed for each plot type
+    # Map data needs: lat, lon, unixtime, datetime, divenumber
+    map_columns = ['lat', 'lon', 'unixtime', 'divenumber', 'depth']
+    
+    # pH drift data needs: divenumber, phin, phin_canb, unixtime, datetime
+    ph_drift_columns = ['divenumber', 'phin', 'phin_canb', 'unixtime', 'depth']
+    
+    # Determine columns needed based on selected tab
+    all_plot_columns = set()
+    if selected_tab == 'tab-phin-phin-canyonb':
+        all_plot_columns.update(['phin', 'phin_canb', 'depth', 'unixtime', 'divenumber'])
+    elif selected_tab == 'tab-ph-drift':
+        # pH drift tab only needs pH drift data
+        pass
+    elif selected_tab == 'tab-temp-psal':
+        all_plot_columns.update(['tc', 'psal', 'depth', 'unixtime', 'divenumber'])
+    elif selected_tab == 'tab-oxy-sigma':
+        all_plot_columns.update(['doxy', 'sigma', 'depth', 'unixtime', 'divenumber'])
+    elif selected_tab == 'tab-2':
+        all_plot_columns.update(['vrse', 'vrse_std', 'vk', 'vk_std', 'ik', 'ib', 'depth', 'unixtime', 'divenumber'])
+    elif selected_tab == 'tab-contour':
+        # For contour plot, we need all columns to populate dropdown
+        # But we'll optimize this by getting a smaller set for the dropdown
+        all_plot_columns.update(['depth', 'unixtime', 'divenumber', 'phin', 'tc', 'psal', 'doxy', 'sigma', 'phin_canb'])
+    elif selected_tab == 'tab-property':
+        # For property plot, we need all columns to populate dropdown
+        # But we'll optimize this by getting a smaller set for the dropdown
+        all_plot_columns.update(['depth', 'unixtime', 'divenumber', 'phin', 'tc', 'psal', 'doxy', 'sigma', 'phin_canb'])
+    
+    # Convert to list and ensure we have the essential columns
+    essential_columns = ['divenumber', 'depth', 'unixtime']
+    plot_columns = list(all_plot_columns.union(set(essential_columns)))
+    
+    # Load data with error handling and column selection
     try:
-        df_latest = get_dives_data(selected_mission, min_dive=min_dive, max_dive=max_dive)
-        df_map = get_map_data(selected_mission, min_dive=min_dive, max_dive=max_dive)
-        df_ph_drift = get_ph_drift_data(selected_mission, depth=ph_drift_depth)
+        df_latest = get_dives_data(selected_mission, min_dive=min_dive, max_dive=max_dive, columns=plot_columns)
+        df_map = get_map_data(selected_mission, min_dive=min_dive, max_dive=max_dive, columns=map_columns)
+        df_ph_drift = get_ph_drift_data(selected_mission, depth=ph_drift_depth, columns=ph_drift_columns)
     except Exception as e:
         print(f"Error loading data: {e}")
         df_latest = pd.DataFrame()
@@ -1161,7 +1325,7 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
             x="ib",
             title="Ib[nA] vs. Depth"
         )
-    # Property plot dropdown options
+    # Contour plot and Property plot dropdown options
     if len(df_latest) > 0:
         dropdown_options = [
             {'label': col, 'value': col}
@@ -1193,6 +1357,38 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
         dropdown_options = []
         tickvals = []
         ticktext = []
+        
+    # Contour plot figure
+    if selected_tab == 'tab-contour' and contour_z and len(df_latest) > 0:
+        # Check if requested column exists
+        if contour_z in df_latest.columns:
+            try:
+                fig_contour = make_contour_plot(
+                    df_latest, 
+                    contour_z,
+                    title=f'{contour_z} Contour Plot'
+                )
+            except Exception as e:
+                print(f"Error creating contour plot: {e}")
+                fig_contour = go.Figure()
+                fig_contour.add_annotation(
+                    text=f"Error creating contour plot: {str(e)}",
+                    xref="paper", yref="paper",
+                    x=0.5, y=0.5,
+                    showarrow=False,
+                    font=dict(size=14, color="red")
+                )
+        else:
+            fig_contour = go.Figure()
+            fig_contour.add_annotation(
+                text="Selected column not available in data",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5,
+                showarrow=False,
+                font=dict(size=14, color="gray")
+            )
+    else:
+        fig_contour = go.Figure()
         
     # Property plot figure
     if selected_tab == 'tab-property' and property_x and property_y and len(df_latest) > 0:
@@ -1244,6 +1440,7 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
             dash.no_update, dash.no_update, dash.no_update,
             scatter_fig_ph_delta,
             dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            dash.no_update, dash.no_update,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
@@ -1254,6 +1451,7 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
             dash.no_update,
             scatter_fig_ph_drift,
             dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            dash.no_update, dash.no_update,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
@@ -1263,6 +1461,7 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
             scatter_fig_temp, scatter_fig_salinity, dash.no_update,
             dash.no_update, dash.no_update,
             dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            dash.no_update, dash.no_update,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
@@ -1272,6 +1471,7 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
             dash.no_update, dash.no_update, scatter_fig_sigma,
             dash.no_update, dash.no_update,
             dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            dash.no_update, dash.no_update,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
@@ -1281,6 +1481,7 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
             dash.no_update, dash.no_update, dash.no_update,
             dash.no_update, dash.no_update,
             scatter_fig_vrs, scatter_fig_vrs_std, scatter_fig_vk, scatter_fig_vk_std, scatter_fig_ik, scatter_fig_ib,
+            dash.no_update, dash.no_update,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
@@ -1291,6 +1492,17 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
             dash.no_update,
             scatter_fig_ph_drift,
             dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            dash.no_update, dash.no_update,  # contour plot outputs
+            go.Figure(),
+            dropdown_options, dropdown_options
+        )
+    elif selected_tab == 'tab-contour':
+        return (
+            map_fig, dash.no_update, dash.no_update,
+            dash.no_update, dash.no_update, dash.no_update,
+            dash.no_update, dash.no_update,
+            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            fig_contour, dropdown_options,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
@@ -1300,6 +1512,7 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
             dash.no_update, dash.no_update, dash.no_update,
             dash.no_update, dash.no_update,
             dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            dash.no_update, dash.no_update,  # contour plot outputs
             fig_property,
             dropdown_options, dropdown_options
         )
@@ -1309,6 +1522,7 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, prope
             dash.no_update, dash.no_update, dash.no_update,
             dash.no_update, dash.no_update,
             dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            dash.no_update, dash.no_update,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
