@@ -137,6 +137,11 @@ def get_dives_data(mission_id: str, min_dive: int = None, max_dive: int = None, 
             else:
                 df['ph-delta'] = pd.NA
                 
+            if 'phin_corr' in df.columns and 'phin_canb' in df.columns:
+                df['ph-corr-delta'] = df['phin_corr'] - df['phin_canb']
+            else:
+                df['ph-corr-delta'] = pd.NA
+                
             if 'unixtime' in df.columns:
                 df['datetime'] = pd.to_datetime(df['unixtime'], unit='s', errors='coerce')
             else:
@@ -226,6 +231,11 @@ def get_map_data(mission_id: str, min_dive: int = None, max_dive: int = None, de
             else:
                 df['ph-delta'] = pd.NA
                 
+            if 'phin_corr' in df.columns and 'phin_canb' in df.columns:
+                df['ph-corr-delta'] = df['phin_corr'] - df['phin_canb']
+            else:
+                df['ph-corr-delta'] = pd.NA
+                
             if 'unixtime' in df.columns:
                 df['datetime'] = pd.to_datetime(df['unixtime'], unit='s', errors='coerce')
             else:
@@ -301,6 +311,11 @@ def get_ph_drift_data(mission_id: str, min_dive: int = None, max_dive: int = Non
                 df['ph-delta'] = df['phin'] - df['phin_canb']
             else:
                 df['ph-delta'] = pd.NA
+                
+            if 'phin_corr' in df.columns and 'phin_canb' in df.columns:
+                df['ph-corr-delta'] = df['phin_corr'] - df['phin_canb']
+            else:
+                df['ph-corr-delta'] = pd.NA
                 
             if 'unixtime' in df.columns:
                 df['datetime'] = pd.to_datetime(df['unixtime'], unit='s', errors='coerce')
