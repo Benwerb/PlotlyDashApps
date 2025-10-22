@@ -784,6 +784,17 @@ app.layout = dbc.Container([
         dcc.Tab(label='pHin & ΔpHin', value='tab-phin-phin-canyonb', children=[
             dbc.Row([
                 dbc.Col([
+                    html.Label('pH Selection:', style={'fontWeight': 'bold', 'fontSize': '14px', 'marginBottom': '5px'}),
+                    dbc.Switch(
+                        id='phin-switch',
+                        label='Use pHin instead of pHin_corr',
+                        value=False,
+                        style={'marginBottom': '20px'}
+                    )
+                ], xs=12, sm=12, md=12, lg=12, xl=12, style={'padding': '10px'})
+            ]),
+            dbc.Row([
+                dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             dcc.Graph(id='pHin-plot', style={'height': '70vh', 'minHeight': '300px', 'width': '100%'})
@@ -813,7 +824,16 @@ app.layout = dbc.Container([
                         marks={i: f'{i}m' for i in range(0, 1001, 100)},
                         tooltip={"placement": "bottom", "always_visible": True}
                     )
-                ], xs=12, sm=12, md=12, lg=12, xl=12, style={'marginBottom': '20px', 'padding': '10px'})
+                ], xs=12, sm=12, md=6, lg=6, xl=6, style={'marginBottom': '20px', 'padding': '10px'}),
+                dbc.Col([
+                    html.Label('pH Variable Selection:', style={'fontWeight': 'bold', 'fontSize': '14px', 'marginBottom': '5px'}),
+                    dbc.Switch(
+                        id='ph-drift-switch',
+                        label='Use pHin instead of pHin_corr',
+                        value=False,
+                        style={'marginBottom': '20px'}
+                    )
+                ], xs=12, sm=12, md=6, lg=6, xl=6, style={'marginBottom': '20px', 'padding': '10px'})
             ]),
             dbc.Row([
                 dbc.Col([
@@ -1053,9 +1073,11 @@ def update_range_slider_and_info(selected_mission):
     Input('property-x-dropdown', 'value'),
     Input('property-y-dropdown', 'value'),
     Input('ph-drift-depth-dropdown', 'value'),
+    Input('phin-switch', 'value'),
+    Input('ph-drift-switch', 'value'),
     ]
 )
-def update_all_figs(n, selected_mission, range_slider_value, selected_tab, contour_z, property_x, property_y, ph_drift_depth):
+def update_all_figs(n, selected_mission, range_slider_value, selected_tab, contour_z, property_x, property_y, ph_drift_depth, phin_switch, ph_drift_switch):
     # Load glider and filter by selected gliders
     min_dive = int(range_slider_value[0])
     max_dive = int(range_slider_value[1])
@@ -1066,12 +1088,12 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, conto
     map_columns = ['lat', 'lon', 'unixtime', 'divenumber', 'depth']
     
     # pH drift data needs: divenumber, phin, phin_canb, unixtime, datetime
-    ph_drift_columns = ['divenumber', 'phin', 'phin_canb', 'unixtime', 'depth']
+    ph_drift_columns = ['divenumber', 'phin', 'phin_canb', 'phin_corr', 'unixtime', 'depth']
     
     # Determine columns needed based on selected tab
     all_plot_columns = set()
     if selected_tab == 'tab-phin-phin-canyonb':
-        all_plot_columns.update(['phin', 'phin_canb', 'depth', 'unixtime', 'divenumber'])
+        all_plot_columns.update(['phin', 'phin_canb', 'phin_corr', 'depth', 'unixtime', 'divenumber'])
     elif selected_tab == 'tab-ph-drift':
         # pH drift tab only needs pH drift data
         pass
@@ -1084,11 +1106,11 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, conto
     elif selected_tab == 'tab-contour':
         # For contour plot, we need all columns to populate dropdown
         # But we'll optimize this by getting a smaller set for the dropdown
-        all_plot_columns.update(['depth', 'unixtime', 'divenumber', 'phin', 'tc', 'psal', 'doxy', 'sigma', 'phin_canb'])
+        all_plot_columns.update(['depth', 'unixtime', 'divenumber', 'phin', 'tc', 'psal', 'doxy', 'sigma', 'phin_canb', 'phin_corr'])
     elif selected_tab == 'tab-property':
         # For property plot, we need all columns to populate dropdown
         # But we'll optimize this by getting a smaller set for the dropdown
-        all_plot_columns.update(['depth', 'unixtime', 'divenumber', 'phin', 'tc', 'psal', 'doxy', 'sigma', 'phin_canb'])
+        all_plot_columns.update(['depth', 'unixtime', 'divenumber', 'phin', 'tc', 'psal', 'doxy', 'sigma', 'phin_canb', 'phin_corr'])
     
     # Convert to list and ensure we have the essential columns
     essential_columns = ['divenumber', 'depth', 'unixtime']
@@ -1260,10 +1282,14 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, conto
         scatter_fig_ik = go.Figure()
         scatter_fig_ib = go.Figure()
     else:
+        # Choose pH variable based on switch (now inverted since phin_corr is default)
+        phin_var = "phin" if phin_switch else "phin_corr"
+        phin_title = "pHinsitu[Total] vs. Depth" if phin_switch else "pHinsitu_corr[Total] vs. Depth"
+        
         scatter_fig_pHin = make_depth_line_plot(
             df_latest,
-            x="phin",
-            title="pHinsitu[Total] vs. Depth"
+            x=phin_var,
+            title=phin_title
         )
         scatter_fig_doxy = make_depth_line_plot(
             df_latest,
@@ -1285,15 +1311,23 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, conto
             x="sigma",
             title="Sigma[kg/m^3] vs. Depth"
         )
+        # Choose pH delta variable based on switch (now inverted since phin_corr is default)
+        ph_delta_var = "ph-delta" if phin_switch else "ph-corr-delta"
+        ph_delta_title = "ΔpHinsitu[Total] (pHin - pHinCanyonB) vs. Depth" if phin_switch else "ΔpHinsitu_corr[Total] (pHin_corr - pHinCanyonB) vs. Depth"
+        
         scatter_fig_ph_delta = make_depth_line_plot(
             df_latest,
-            x="ph-delta",
-            title="ΔpHinsitu[Total] (pHin - pHinCanyonB)  vs. Depth"
+            x=ph_delta_var,
+            title=ph_delta_title
         )
+        # Choose pH drift variable based on ph_drift_switch (now inverted since phin_corr is default)
+        ph_drift_var = "ph-delta" if ph_drift_switch else "ph-corr-delta"
+        ph_drift_title = f"ΔpHinsitu[Total] (pHin - pHinCanyonB) at {ph_drift_depth}m vs. Dive Number" if ph_drift_switch else f"ΔpHinsitu_corr[Total] (pHin_corr - pHinCanyonB) at {ph_drift_depth}m vs. Dive Number"
+        
         scatter_fig_ph_drift = make_depth_scatter_plot(
             df_ph_drift,
-            x="divenumber", y="ph-delta",
-            title=f"ΔpHinsitu[Total] (pHin - pHinCanyonB) at {ph_drift_depth}m vs. Dive Number"
+            x="divenumber", y=ph_drift_var,
+            title=ph_drift_title
         )
         scatter_fig_vrs = make_depth_line_plot(
             df_latest,
