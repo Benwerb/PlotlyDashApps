@@ -1078,9 +1078,24 @@ def update_range_slider_and_info(selected_mission):
     ]
 )
 def update_all_figs(n, selected_mission, range_slider_value, selected_tab, contour_z, property_x, property_y, ph_drift_depth, phin_switch, ph_drift_switch):
+    # Handle None values for dropdowns that might not be initialized yet
+    if contour_z is None:
+        contour_z = 'phin'
+    if property_x is None:
+        property_x = 'tc'
+    if property_y is None:
+        property_y = 'depth'
+    if selected_mission is None:
+        selected_mission = default_mission
+    if selected_tab is None:
+        selected_tab = 'tab-phin-phin-canyonb'
     # Load glider and filter by selected gliders
-    min_dive = int(range_slider_value[0])
-    max_dive = int(range_slider_value[1])
+    if range_slider_value is None or len(range_slider_value) < 2:
+        # Fallback to default range if slider value is not available
+        min_dive, max_dive = 1, 10
+    else:
+        min_dive = int(range_slider_value[0])
+        max_dive = int(range_slider_value[1])
     # print(f"Mission: {selected_mission}, Range: {min_dive} to {max_dive}")
     
     # Define columns needed for each plot type
@@ -1470,93 +1485,82 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, conto
         fig_property = go.Figure()
     if selected_tab == 'tab-phin-phin-canyonb':
         return (
-            map_fig, scatter_fig_pHin, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update,
+            map_fig, scatter_fig_pHin, go.Figure(),
+            go.Figure(), go.Figure(), go.Figure(),
             scatter_fig_ph_delta,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update,  # contour plot outputs
+            go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(),
+            go.Figure(), dropdown_options,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
     elif selected_tab == 'tab-ph-drift':
         return (
-            map_fig, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update,
+            map_fig, go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(), go.Figure(),
+            go.Figure(),
             scatter_fig_ph_drift,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update,  # contour plot outputs
+            go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(),
+            go.Figure(), dropdown_options,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
     elif selected_tab == 'tab-temp-psal':
         return (
-            map_fig, dash.no_update, dash.no_update,
-            scatter_fig_temp, scatter_fig_salinity, dash.no_update,
-            dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update,  # contour plot outputs
+            map_fig, go.Figure(), go.Figure(),
+            scatter_fig_temp, scatter_fig_salinity, go.Figure(),
+            go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(),
+            go.Figure(), dropdown_options,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
     elif selected_tab == 'tab-oxy-sigma':
         return (
-            map_fig, dash.no_update, scatter_fig_doxy,
-            dash.no_update, dash.no_update, scatter_fig_sigma,
-            dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update,  # contour plot outputs
+            map_fig, go.Figure(), scatter_fig_doxy,
+            go.Figure(), go.Figure(), scatter_fig_sigma,
+            go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(),
+            go.Figure(), dropdown_options,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
     elif selected_tab == 'tab-2':
         return (
-            map_fig, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update,
+            map_fig, go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(),
             scatter_fig_vrs, scatter_fig_vrs_std, scatter_fig_vk, scatter_fig_vk_std, scatter_fig_ik, scatter_fig_ib,
-            dash.no_update, dash.no_update,  # contour plot outputs
-            go.Figure(),
-            dropdown_options, dropdown_options
-        )
-    elif selected_tab == 'tab-phin-phin-delta':
-        return (
-            map_fig, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update,
-            scatter_fig_ph_drift,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update,  # contour plot outputs
+            go.Figure(), dropdown_options,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
     elif selected_tab == 'tab-contour':
         return (
-            map_fig, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+            map_fig, go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(),
             fig_contour, dropdown_options,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
     elif selected_tab == 'tab-property':
         return (
-            map_fig, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update,  # contour plot outputs
+            map_fig, go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(),
+            go.Figure(), dropdown_options,  # contour plot outputs
             fig_property,
             dropdown_options, dropdown_options
         )
     else:
         return (
-            map_fig, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update,
-            dash.no_update, dash.no_update,  # contour plot outputs
+            map_fig, go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(),
+            go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(),
+            go.Figure(), dropdown_options,  # contour plot outputs
             go.Figure(),
             dropdown_options, dropdown_options
         )
