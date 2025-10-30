@@ -36,11 +36,15 @@ def get_cached_mission_metadata():
 
 # Cache for dive ranges
 _dive_range_cache = {}
+_dive_range_cache_time = {}
 
 def get_cached_dive_range(mission_id: str):
-    """Get dive range with caching."""
-    if mission_id not in _dive_range_cache:
+    """Get dive range with caching and TTL per mission."""
+    current_time = time()
+    last_time = _dive_range_cache_time.get(mission_id, 0)
+    if mission_id not in _dive_range_cache or (current_time - last_time) >= _cache_ttl:
         _dive_range_cache[mission_id] = get_dive_range(mission_id)
+        _dive_range_cache_time[mission_id] = current_time
     return _dive_range_cache[mission_id]
 
 
@@ -297,7 +301,7 @@ def make_depth_line_plot(
                 color=color_for_legend,
                 labels=labels,
                 title=title,
-                markers=True,
+                markers=False,
                 color_discrete_sequence=viridis_colors,
                 line_group=color_for_legend
             )
@@ -309,8 +313,11 @@ def make_depth_line_plot(
                 y=y,
                 labels=labels,
                 title=title,
-                markers=True
+                markers=False
             )
+
+        # Thicken line width for visibility
+        fig.update_traces(line=dict(width=3))
 
         # Reverse y-axis (for depth plots)
         fig.update_yaxes(autorange="reversed")
@@ -1040,9 +1047,10 @@ def update_plot_range_store(is_decoupled, range_slider_value, selected_mission, 
      Output('RangeSlider', 'max'),
      Output('RangeSlider', 'value'),
      Output('mission-info', 'children')],
-    [Input('mission-dropdown', 'value')]
+    [Input('mission-dropdown', 'value'),
+     Input('interval-refresh', 'n_intervals')]
 )
-def update_range_slider_and_info(selected_mission):
+def update_range_slider_and_info(selected_mission, _n_intervals):
     """
     Update the range slider and display mission metadata based on the selected mission.
     
