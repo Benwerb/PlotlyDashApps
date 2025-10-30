@@ -1040,8 +1040,7 @@ def update_plot_range_store(is_decoupled, range_slider_value, selected_mission, 
      Output('RangeSlider', 'max'),
      Output('RangeSlider', 'value'),
      Output('mission-info', 'children')],
-    [Input('mission-dropdown', 'value')],
-    prevent_initial_call=True
+    [Input('mission-dropdown', 'value')]
 )
 def update_range_slider_and_info(selected_mission):
     """
