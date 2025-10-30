@@ -1,9 +1,29 @@
 import pandas as pd
 import sqlalchemy
 from sqlalchemy import text
+import os
+
+# Global engine with connection pooling
+_engine = None
 
 def create_engine():
-    return sqlalchemy.create_engine("postgresql://glidata_user:IoFUTBeaQDppSYcmBebA4rV8SJOEMCFI@dpg-d2jobg3e5dus738ce5vg-a.oregon-postgres.render.com/glidata")
+    """Create or return a singleton SQLAlchemy engine with connection pooling."""
+    global _engine
+    if _engine is None:
+        # Use environment variable if available, otherwise use hardcoded connection
+        db_url = os.getenv(
+            "DATABASE_URL",
+            "postgresql://glidata_user:IoFUTBeaQDppSYcmBebA4rV8SJOEMCFI@dpg-d2jobg3e5dus738ce5vg-a.oregon-postgres.render.com/glidata"
+        )
+        # Connection pooling: pool_size=5, max_overflow=10
+        _engine = sqlalchemy.create_engine(
+            db_url,
+            pool_size=5,
+            max_overflow=10,
+            pool_pre_ping=True,  # Verify connections before using them
+            pool_recycle=3600    # Recycle connections after 1 hour
+        )
+    return _engine
 
 def get_mission_metadata() -> pd.DataFrame:
     """

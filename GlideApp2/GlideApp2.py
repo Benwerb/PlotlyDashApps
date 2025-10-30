@@ -5,20 +5,43 @@ import numpy as np
 import plotly.express as px
 import os
 import plotly.graph_objects as go
-import requests
-from bs4 import BeautifulSoup
-from io import StringIO
-import re
-# from nessie_interpolation_function import create_spatial_interpolation
 import datetime as dt
 from typing import cast, List, Dict, Any
 import pytz
 from plotly.validator_cache import ValidatorCache
-import numpy as np
-# from scipy.interpolate import griddata
+from functools import lru_cache
+from time import time
 from database_tools import get_dives_data, get_map_data, get_ph_drift_data, get_available_missions, get_mission_metadata, get_dive_range
 import psycopg2
 from urllib.parse import urlparse
+
+# Cache for mission metadata with TTL
+_mission_metadata_cache = None
+_mission_metadata_cache_time = 0
+_cache_ttl = 300  # Cache for 5 minutes
+
+def get_cached_mission_metadata():
+    """Get mission metadata with caching (5 minute TTL)."""
+    global _mission_metadata_cache, _mission_metadata_cache_time
+    current_time = time()
+    
+    # Return cached data if still valid
+    if _mission_metadata_cache is not None and (current_time - _mission_metadata_cache_time) < _cache_ttl:
+        return _mission_metadata_cache
+    
+    # Fetch fresh data
+    _mission_metadata_cache = get_mission_metadata()
+    _mission_metadata_cache_time = current_time
+    return _mission_metadata_cache
+
+# Cache for dive ranges
+_dive_range_cache = {}
+
+def get_cached_dive_range(mission_id: str):
+    """Get dive range with caching."""
+    if mission_id not in _dive_range_cache:
+        _dive_range_cache[mission_id] = get_dive_range(mission_id)
+    return _dive_range_cache[mission_id]
 
 
 # Define variable-specific percentile limits
@@ -245,6 +268,13 @@ def make_depth_line_plot(
                 df_valid = df_valid.copy()
                 df_valid['datetime_formatted'] = df_valid['datetime'].dt.strftime('%m/%d %H:%M')
                 color_for_legend = 'datetime_formatted'
+                # Ensure the legend shows a friendly title
+                try:
+                    if labels is None:
+                        labels = {x: x, y: y}
+                    labels[color_for_legend] = 'date'
+                except Exception:
+                    pass
             else:
                 color_for_legend = color
             
@@ -537,7 +567,7 @@ app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server # Required for Gunicorn
 
 # Fetch available missions from database with metadata (sorted by most recent data)
-missions_metadata = get_mission_metadata()
+missions_metadata = get_cached_mission_metadata()
 available_missions = missions_metadata['mission_id'].tolist()
 default_mission = available_missions[0] if available_missions else "25820301"
 
@@ -552,7 +582,7 @@ mission_dropdown_options = [
 
 # Get the FULL range of dive numbers for the default mission (without loading all data)
 try:
-    station_min, station_max = get_dive_range(default_mission)
+    station_min, station_max = get_cached_dive_range(default_mission)
 except Exception as e:
     print(f"Error getting dive range: {e}")
     station_min, station_max = 1, 10
@@ -561,31 +591,8 @@ except Exception as e:
 default_slider_min = max(station_min, station_max - 10)
 default_slider_max = station_max
 
-# Load the most recent mission data (only last 10 dives for initial display)
-# Use minimal columns for initial load - will be optimized per tab in callback
-initial_columns = ['divenumber', 'depth', 'unixtime', 'phin', 'phin_canb', 'tc', 'psal', 'doxy', 'sigma', 'vrse', 'vrse_std', 'vk', 'vk_std', 'ik', 'ib']
-map_columns = ['lat', 'lon', 'unixtime', 'divenumber', 'depth']
-ph_drift_columns = ['divenumber', 'phin', 'phin_canb', 'unixtime', 'depth']
-
-try:
-    df_latest = get_dives_data(default_mission, columns=initial_columns)
-    df_map = get_map_data(default_mission, depth=0, columns=map_columns)
-    df_ph_drift = get_ph_drift_data(default_mission, depth=450, columns=ph_drift_columns)
-except Exception as e:
-    print(f"Error loading initial data: {e}")
-    df_latest = pd.DataFrame()
-    df_map = pd.DataFrame()
-    df_ph_drift = pd.DataFrame()
-
-# Safe extraction of datetime values
-if len(df_latest) > 0 and 'unixtime' in df_latest.columns:
-    date_min, date_max = df_latest["unixtime"].min(), df_latest["unixtime"].max() 
-    unix_min, unix_max = df_latest["unixtime"].min(), df_latest["unixtime"].max() 
-    unix_max_minus_12hrs = unix_max - 60*60*12
-    datetime_max = df_latest["unixtime"].max()
-else:
-    date_min = date_max = unix_min = unix_max = datetime_max = None
-    unix_max_minus_12hrs = None
+# Removed initial data loading - data will be loaded on-demand in callbacks
+# This significantly improves startup time
 
 app.layout = dbc.Container([
     # Top row - Header
@@ -631,8 +638,22 @@ app.layout = dbc.Container([
                 ]),
                 # Range slider - shows full dive range, defaults to last 10
                 html.Div([
-                    html.Label('Dive Number Range:', 
-                              style={'fontWeight': 'bold', 'fontSize': '14px', 'marginBottom': '5px'}),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label('Dive Number Range:', 
+                                      style={'fontWeight': 'bold', 'fontSize': '14px', 'marginBottom': '5px'}),
+                        ], width=12)
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Switch(
+                                id='range-slider-decouple-switch',
+                                label='Decouple map range from plots',
+                                value=False,
+                                style={'marginBottom': '10px'}
+                            )
+                        ], width=12)
+                    ]),
                     dcc.RangeSlider(
                         id='RangeSlider',
                         updatemode='mouseup',  # don't let it update till mouse released
@@ -649,7 +670,9 @@ app.layout = dbc.Container([
                     'marginTop': '10px',
                     'width': '100%',
                     'boxSizing': 'border-box'
-                })
+                }),
+                # Hidden storage for plot range when decoupled
+                dcc.Store(id='plot-range-store', data=[default_slider_min, default_slider_max])
             ], style={'padding': '10px', 'backgroundColor': '#e3f2fd'})
         ], width=12)
     ]),
@@ -859,7 +882,7 @@ app.layout = dbc.Container([
                 ], xs=12, sm=12, md=6, lg=6, xl=6),
             ])
         ]),
-        dcc.Tab(label='Oxygen & Sigma Theta', value='tab-oxy-sigma', children=[
+        dcc.Tab(label='Oxygen and Fluorescence', value='tab-oxy-sigma', children=[
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -971,8 +994,8 @@ def refresh_mission_dropdown(n):
     This ensures new data in the database is reflected in the UI.
     """
     try:
-        # Fetch fresh metadata from database
-        fresh_metadata = get_mission_metadata()
+        # Fetch fresh metadata from database (using cache)
+        fresh_metadata = get_cached_mission_metadata()
         
         # Create updated dropdown options with date ranges
         updated_options = [
@@ -988,13 +1011,37 @@ def refresh_mission_dropdown(n):
         # Return existing options as fallback
         return mission_dropdown_options
 
+# --- Callback to manage plot range store when decoupling ---
+@app.callback(
+    Output('plot-range-store', 'data'),
+    [Input('range-slider-decouple-switch', 'value'),
+     Input('RangeSlider', 'value'),
+     Input('mission-dropdown', 'value')],
+    [State('plot-range-store', 'data')]
+)
+def update_plot_range_store(is_decoupled, range_slider_value, selected_mission, current_plot_range):
+    """
+    Manage the plot range store. When coupled, it follows the slider.
+    When decoupled, it maintains its own state.
+    """
+    if not selected_mission:
+        return [1, 10]
+    
+    if not is_decoupled:
+        # Coupled mode: plot range follows the slider
+        return range_slider_value if range_slider_value else [1, 10]
+    else:
+        # Decoupled mode: keep current plot range
+        return current_plot_range if current_plot_range else [1, 10]
+
 # --- Callback to update RangeSlider and mission info when mission changes ---
 @app.callback(
     [Output('RangeSlider', 'min'),
      Output('RangeSlider', 'max'),
      Output('RangeSlider', 'value'),
      Output('mission-info', 'children')],
-    [Input('mission-dropdown', 'value')]
+    [Input('mission-dropdown', 'value')],
+    prevent_initial_call=True
 )
 def update_range_slider_and_info(selected_mission):
     """
@@ -1007,7 +1054,7 @@ def update_range_slider_and_info(selected_mission):
         return 1, 10, [1, 10], "No mission selected"
     
     # Get the FULL range of dive numbers for this mission (without loading all data)
-    min_dive, max_dive = get_dive_range(selected_mission)
+    min_dive, max_dive = get_cached_dive_range(selected_mission)
     
     if min_dive == 1 and max_dive == 10:  # Check if it's the fallback default
         return 1, 10, [1, 10], "No data available for this mission"
@@ -1017,7 +1064,7 @@ def update_range_slider_and_info(selected_mission):
     
     # Get FRESH mission metadata for display (don't use stale global variable)
     try:
-        fresh_metadata = get_mission_metadata()
+        fresh_metadata = get_cached_mission_metadata()
         mission_meta = fresh_metadata[fresh_metadata['mission_id'] == selected_mission]
         if len(mission_meta) > 0:
             meta = mission_meta.iloc[0]
@@ -1064,6 +1111,8 @@ def update_range_slider_and_info(selected_mission):
     [Input('interval-refresh', 'n_intervals'),
     Input('mission-dropdown', 'value'),
     Input('RangeSlider', 'value'),
+    Input('range-slider-decouple-switch', 'value'),
+    Input('plot-range-store', 'data'),
     #  Input('Parameters', 'value'),
     #  Input('map_options', 'value'),
     #  Input('glider_overlay_checklist', 'value'),
@@ -1077,7 +1126,7 @@ def update_range_slider_and_info(selected_mission):
     Input('ph-drift-switch', 'value'),
     ]
 )
-def update_all_figs(n, selected_mission, range_slider_value, selected_tab, contour_z, property_x, property_y, ph_drift_depth, phin_switch, ph_drift_switch):
+def update_all_figs(n, selected_mission, range_slider_value, is_decoupled, plot_range_store, selected_tab, contour_z, property_x, property_y, ph_drift_depth, phin_switch, ph_drift_switch):
     # Handle None values for dropdowns that might not be initialized yet
     if contour_z is None:
         contour_z = 'phin'
@@ -1089,14 +1138,27 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, conto
         selected_mission = default_mission
     if selected_tab is None:
         selected_tab = 'tab-phin-phin-canyonb'
-    # Load glider and filter by selected gliders
+    
+    # Determine range for map (always uses slider)
     if range_slider_value is None or len(range_slider_value) < 2:
-        # Fallback to default range if slider value is not available
-        min_dive, max_dive = 1, 10
+        map_min_dive, map_max_dive = 1, 10
     else:
-        min_dive = int(range_slider_value[0])
-        max_dive = int(range_slider_value[1])
-    # print(f"Mission: {selected_mission}, Range: {min_dive} to {max_dive}")
+        map_min_dive = int(range_slider_value[0])
+        map_max_dive = int(range_slider_value[1])
+    
+    # Determine range for plots (uses slider when coupled, plot_range_store when decoupled)
+    if not is_decoupled:
+        # Coupled mode: plots use the same range as the map
+        plot_min_dive, plot_max_dive = map_min_dive, map_max_dive
+    else:
+        # Decoupled mode: plots use their own range
+        if plot_range_store is None or len(plot_range_store) < 2:
+            plot_min_dive, plot_max_dive = 1, 10
+        else:
+            plot_min_dive = int(plot_range_store[0])
+            plot_max_dive = int(plot_range_store[1])
+    
+    # print(f"Mission: {selected_mission}, Map Range: {map_min_dive} to {map_max_dive}, Plot Range: {plot_min_dive} to {plot_max_dive}")
     
     # Define columns needed for each plot type
     # Map data needs: lat, lon, unixtime, datetime, divenumber
@@ -1115,17 +1177,17 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, conto
     elif selected_tab == 'tab-temp-psal':
         all_plot_columns.update(['tc', 'psal', 'depth', 'unixtime', 'divenumber'])
     elif selected_tab == 'tab-oxy-sigma':
-        all_plot_columns.update(['doxy', 'sigma', 'depth', 'unixtime', 'divenumber'])
+        all_plot_columns.update(['doxy', 'chla', 'depth', 'unixtime', 'divenumber'])
     elif selected_tab == 'tab-2':
         all_plot_columns.update(['vrse', 'vrse_std', 'vk', 'vk_std', 'ik', 'ib', 'depth', 'unixtime', 'divenumber'])
     elif selected_tab == 'tab-contour':
         # For contour plot, we need all columns to populate dropdown
         # But we'll optimize this by getting a smaller set for the dropdown
-        all_plot_columns.update(['depth', 'unixtime', 'divenumber', 'phin', 'tc', 'psal', 'doxy', 'sigma', 'phin_canb', 'phin_corr'])
+        all_plot_columns.update(['depth', 'unixtime', 'divenumber', 'phin', 'tc', 'psal', 'doxy', 'chla', 'sigma', 'phin_canb', 'phin_corr'])
     elif selected_tab == 'tab-property':
         # For property plot, we need all columns to populate dropdown
         # But we'll optimize this by getting a smaller set for the dropdown
-        all_plot_columns.update(['depth', 'unixtime', 'divenumber', 'phin', 'tc', 'psal', 'doxy', 'sigma', 'phin_canb', 'phin_corr'])
+        all_plot_columns.update(['depth', 'unixtime', 'divenumber', 'phin', 'tc', 'psal', 'doxy', 'chla', 'sigma', 'phin_canb', 'phin_corr'])
     
     # Convert to list and ensure we have the essential columns
     essential_columns = ['divenumber', 'depth', 'unixtime']
@@ -1133,8 +1195,8 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, conto
     
     # Load data with error handling and column selection
     try:
-        df_latest = get_dives_data(selected_mission, min_dive=min_dive, max_dive=max_dive, columns=plot_columns)
-        df_map = get_map_data(selected_mission, min_dive=min_dive, max_dive=max_dive, columns=map_columns)
+        df_latest = get_dives_data(selected_mission, min_dive=plot_min_dive, max_dive=plot_max_dive, columns=plot_columns)
+        df_map = get_map_data(selected_mission, min_dive=map_min_dive, max_dive=map_max_dive, columns=map_columns)
         df_ph_drift = get_ph_drift_data(selected_mission, depth=ph_drift_depth, columns=ph_drift_columns)
     except Exception as e:
         print(f"Error loading data: {e}")
@@ -1287,7 +1349,7 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, conto
         scatter_fig_doxy = go.Figure()
         scatter_fig_temp = go.Figure()
         scatter_fig_salinity = go.Figure()
-        scatter_fig_sigma = go.Figure()
+        scatter_fig_chla = go.Figure()
         scatter_fig_ph_delta = go.Figure()
         scatter_fig_ph_drift = go.Figure()
         scatter_fig_vrs = go.Figure()
@@ -1321,10 +1383,10 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, conto
             x="psal",
             title="Salinity[pss] vs. Depth"
         )
-        scatter_fig_sigma = make_depth_line_plot(
+        scatter_fig_chla = make_depth_line_plot(
             df_latest,
-            x="sigma",
-            title="Sigma[kg/m^3] vs. Depth"
+            x="chla",
+            title="Fluorescence vs. Depth"
         )
         # Choose pH delta variable based on switch (now inverted since phin_corr is default)
         ph_delta_var = "ph-delta" if phin_switch else "ph-corr-delta"
@@ -1517,7 +1579,7 @@ def update_all_figs(n, selected_mission, range_slider_value, selected_tab, conto
     elif selected_tab == 'tab-oxy-sigma':
         return (
             map_fig, go.Figure(), scatter_fig_doxy,
-            go.Figure(), go.Figure(), scatter_fig_sigma,
+            go.Figure(), go.Figure(), scatter_fig_chla,
             go.Figure(), go.Figure(),
             go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(), go.Figure(),
             go.Figure(), dropdown_options,  # contour plot outputs
