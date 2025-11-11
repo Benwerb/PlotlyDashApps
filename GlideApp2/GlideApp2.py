@@ -1520,6 +1520,7 @@ def update_all_figs(n, selected_mission, range_slider_value, is_decoupled, plot_
                     title=f'{property_x} vs. {property_y}',
                     template='plotly_white',
                     color='unixtime' if 'unixtime' in df_latest.columns else None,
+                    render_mode="webgl",
                 )
                 if 'depth' in property_y.lower() or property_y == 'depth':
                     fig_property.update_yaxes(autorange="reversed")
