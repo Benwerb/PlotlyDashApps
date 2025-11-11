@@ -303,7 +303,8 @@ def make_depth_line_plot(
                 title=title,
                 markers=False,
                 color_discrete_sequence=viridis_colors,
-                line_group=color_for_legend
+                line_group=color_for_legend,
+                render_mode="webgl"
             )
         else:
             # No color column, just plot the line
@@ -313,7 +314,8 @@ def make_depth_line_plot(
                 y=y,
                 labels=labels,
                 title=title,
-                markers=False
+                markers=False,
+                render_mode="webgl"
             )
 
         # Thicken line width for visibility
@@ -818,7 +820,7 @@ app.layout = dbc.Container([
                     dbc.Switch(
                         id='phin-switch',
                         label='Use pHin instead of pHin_corr',
-                        value=False,
+                        value=True,
                         style={'marginBottom': '20px'}
                     )
                 ], xs=12, sm=12, md=12, lg=12, xl=12, style={'padding': '10px'})
