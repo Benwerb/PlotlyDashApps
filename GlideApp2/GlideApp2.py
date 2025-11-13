@@ -14,6 +14,8 @@ from time import time
 from database_tools import get_dives_data, get_map_data, get_ph_drift_data, get_available_missions, get_mission_metadata, get_dive_range
 import psycopg2
 from urllib.parse import urlparse
+import requests
+import re
 
 # Cache for mission metadata with TTL
 _mission_metadata_cache = None
@@ -569,6 +571,73 @@ def get_latest_divenumber() -> int | None:
         except Exception:
             pass
 
+# Cache for Gulf Stream coordinates
+_gulf_stream_coords_cache = None
+_gulf_stream_coords_cache_time = 0
+_gulf_stream_cache_ttl = 3600  # Cache for 1 hour (Gulf Stream data updates less frequently)
+
+def getGulfStreamCoords(url='https://ocean.weather.gov/gulf_stream_latest.txt'):
+    """
+    Fetch and parse Gulf Stream coordinates from NOAA data.
+    Uses caching to avoid frequent API calls.
+    
+    Parameters:
+    ----------
+    url : str
+        URL to fetch Gulf Stream data from.
+    
+    Returns:
+    -------
+    pd.DataFrame
+        DataFrame with 'Lat' and 'Lon' columns containing Gulf Stream coordinates.
+    """
+    global _gulf_stream_coords_cache, _gulf_stream_coords_cache_time
+    
+    current_time = time()
+    
+    # Return cached data if still valid
+    if _gulf_stream_coords_cache is not None and (current_time - _gulf_stream_coords_cache_time) < _gulf_stream_cache_ttl:
+        return _gulf_stream_coords_cache
+    
+    try:
+        # Step 1: Retrieve the data
+        response = requests.get(url)
+        data = response.text
+
+        # Step 2: Locate the coordinates section
+        match = re.search(r'RMKS/1\. GULF STREAM NORTH WALL DATA FOR.*?:\s*(.*?)(?:RMKS/|$)', data, re.S)
+        if not match:
+            raise ValueError('Could not locate the Gulf Stream coordinates section.')
+        coordinates_text = match.group(1).strip()
+
+        # Step 3: Extract coordinate pairs (format like 25.5N80.1W)
+        coordinate_strings = re.findall(r'(\d+\.\d+N\d+\.\d+W)', coordinates_text)
+
+        # Step 4: Convert to decimal degrees and store in lists
+        latitudes = []
+        longitudes = []
+
+        for pair in coordinate_strings:
+            lat_str, lon_str = re.match(r'(\d+\.\d+)N(\d+\.\d+)W', pair).groups()
+            latitudes.append(float(lat_str))
+            longitudes.append(-float(lon_str))  # W longitude is negative
+
+        # Step 5: Create a pandas DataFrame
+        gulfstreamcoords = pd.DataFrame({
+            'Lat': latitudes,
+            'Lon': longitudes
+        })
+        
+        # Cache the result
+        _gulf_stream_coords_cache = gulfstreamcoords
+        _gulf_stream_coords_cache_time = current_time
+        
+        return gulfstreamcoords
+    except Exception as e:
+        print(f"Error fetching Gulf Stream coordinates: {e}")
+        # Return empty DataFrame if fetch fails
+        return pd.DataFrame({'Lat': [], 'Lon': []})
+
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = cast(List[str | Dict[str, Any]], [dbc.themes.FLATLY])
@@ -649,7 +718,7 @@ app.layout = dbc.Container([
                 html.Div([
                     dbc.Row([
                         dbc.Col([
-                            html.Label('Dive Number Range:', 
+                            html.Label('Map Options:', 
                                       style={'fontWeight': 'bold', 'fontSize': '14px', 'marginBottom': '5px'}),
                         ], width=12)
                     ]),
@@ -658,6 +727,16 @@ app.layout = dbc.Container([
                             dbc.Switch(
                                 id='range-slider-decouple-switch',
                                 label='Decouple map range from plots',
+                                value=False,
+                                style={'marginBottom': '10px'}
+                            )
+                        ], width=12)
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Switch(
+                                id='overlay-gulf-stream',
+                                label='Overlay Gulf Stream Bounds',
                                 value=False,
                                 style={'marginBottom': '10px'}
                             )
@@ -1133,9 +1212,10 @@ def update_range_slider_and_info(selected_mission, _n_intervals):
     Input('ph-drift-depth-dropdown', 'value'),
     Input('phin-switch', 'value'),
     Input('ph-drift-switch', 'value'),
+    Input('overlay-gulf-stream', 'value'),
     ]
 )
-def update_all_figs(n, selected_mission, range_slider_value, is_decoupled, plot_range_store, selected_tab, contour_z, property_x, property_y, ph_drift_depth, phin_switch, ph_drift_switch):
+def update_all_figs(n, selected_mission, range_slider_value, is_decoupled, plot_range_store, selected_tab, contour_z, property_x, property_y, ph_drift_depth, phin_switch, ph_drift_switch, overlay_gulf_stream):
     # Handle None values for dropdowns that might not be initialized yet
     if contour_z is None:
         contour_z = 'phin'
@@ -1147,6 +1227,8 @@ def update_all_figs(n, selected_mission, range_slider_value, is_decoupled, plot_
         selected_mission = default_mission
     if selected_tab is None:
         selected_tab = 'tab-phin-phin-canyonb'
+    if overlay_gulf_stream is None:
+        overlay_gulf_stream = False
     
     # Determine range for map (always uses slider)
     if range_slider_value is None or len(range_slider_value) < 2:
@@ -1342,6 +1424,22 @@ def update_all_figs(n, selected_mission, range_slider_value, is_decoupled, plot_
             borderwidth=1
         )
     )
+    
+    # Add Gulf Stream overlay if enabled
+    if overlay_gulf_stream:
+        try:
+            gulfstreamcoords = getGulfStreamCoords()
+            if len(gulfstreamcoords) > 0:
+                map_fig.add_trace(go.Scattermap(
+                    lat=gulfstreamcoords['Lat'],
+                    lon=gulfstreamcoords['Lon'],
+                    mode='lines+markers',
+                    name='Gulf Stream',
+                    marker=dict(size=6, color='deepskyblue'),
+                    line=dict(width=2, color='deepskyblue')
+                ))
+        except Exception as e:
+            print(f"Error adding Gulf Stream overlay: {e}")
 
     # For scatter plots: full filtered DataFrame
     if len(df_latest) == 0 or 'depth' not in df_latest.columns:
