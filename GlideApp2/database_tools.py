@@ -174,7 +174,8 @@ def get_dives_data(mission_id: str, min_dive: int = None, max_dive: int = None, 
 
 def get_map_data(mission_id: str, min_dive: int = None, max_dive: int = None, depth: int = 0, columns: list = None) -> pd.DataFrame:
     """
-    Return surface data (depth=0) for divenumbers in the specified range for a given mission_id.
+    Return location data from the minimum depth (closest to surface) for each dive
+    in the specified range for a given mission_id.
     If min_dive and max_dive are None, returns last 10 dives with valid location data.
     Ordered by divenumber DESC, depth ASC.
     
@@ -187,7 +188,7 @@ def get_map_data(mission_id: str, min_dive: int = None, max_dive: int = None, de
     max_dive : int, optional
         Maximum dive number
     depth : int, optional
-        Depth to filter by (default: 0 for surface)
+        DEPRECATED - kept for compatibility but not used. Returns minimum depth per dive.
     columns : list, optional
         List of column names to select. If None, selects all columns.
     
@@ -207,35 +208,48 @@ def get_map_data(mission_id: str, min_dive: int = None, max_dive: int = None, de
     if min_dive is None and max_dive is None:
         # Default behavior: last 10 dives with valid location data
         sql = f"""
-            SELECT {column_str}
-            FROM public.real_time_binned
-            WHERE mission_id = :mission_id
-            AND divenumber IN (
-                SELECT DISTINCT divenumber
+            WITH ranked_data AS (
+                SELECT {column_str},
+                       ROW_NUMBER() OVER (PARTITION BY divenumber ORDER BY depth ASC) as rn
                 FROM public.real_time_binned
                 WHERE mission_id = :mission_id
-                  AND depth = :depth
                   AND lat IS NOT NULL 
                   AND lon IS NOT NULL
-                ORDER BY divenumber DESC
-                LIMIT 10
+                  AND divenumber IN (
+                      SELECT DISTINCT divenumber
+                      FROM public.real_time_binned
+                      WHERE mission_id = :mission_id
+                        AND lat IS NOT NULL 
+                        AND lon IS NOT NULL
+                      ORDER BY divenumber DESC
+                      LIMIT 10
+                  )
             )
-            AND depth = :depth
-            ORDER BY divenumber DESC, depth ASC
-        """
-        params = {"mission_id": mission_id, "depth": depth}
-    else:
-        # Range-based query
-        sql = f"""
             SELECT {column_str}
-            FROM public.real_time_binned
-            WHERE mission_id = :mission_id
-              AND divenumber >= :min_dive
-              AND divenumber <= :max_dive
-              AND depth = :depth
+            FROM ranked_data
+            WHERE rn = 1
             ORDER BY divenumber DESC, depth ASC
         """
-        params = {"mission_id": mission_id, "min_dive": min_dive, "max_dive": max_dive, "depth": depth}
+        params = {"mission_id": mission_id}
+    else:
+        # Range-based query - get minimum depth per dive
+        sql = f"""
+            WITH ranked_data AS (
+                SELECT {column_str},
+                       ROW_NUMBER() OVER (PARTITION BY divenumber ORDER BY depth ASC) as rn
+                FROM public.real_time_binned
+                WHERE mission_id = :mission_id
+                  AND divenumber >= :min_dive
+                  AND divenumber <= :max_dive
+                  AND lat IS NOT NULL
+                  AND lon IS NOT NULL
+            )
+            SELECT {column_str}
+            FROM ranked_data
+            WHERE rn = 1
+            ORDER BY divenumber DESC, depth ASC
+        """
+        params = {"mission_id": mission_id, "min_dive": min_dive, "max_dive": max_dive}
     
     try:
         with engine.connect() as conn:
