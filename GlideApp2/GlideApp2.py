@@ -292,9 +292,9 @@ def make_depth_line_plot(
             num_colors = len(unique_vals)
             
             if num_colors == 1:
-                viridis_colors = px.colors.sample_colorscale("Cividis", 0.5)
+                color_sequence = px.colors.sample_colorscale("cividis", 0.5)
             else:
-                viridis_colors = px.colors.sample_colorscale("Cividis", [i / (num_colors - 1) for i in range(num_colors)])
+                color_sequence = px.colors.sample_colorscale("cividis", [i / (num_colors - 1) for i in range(num_colors)])
             
             fig = px.line(
                 df_valid,
@@ -304,7 +304,7 @@ def make_depth_line_plot(
                 labels=labels,
                 title=title,
                 markers=False,
-                color_discrete_sequence=viridis_colors,
+                color_discrete_sequence=color_sequence,
                 line_group=color_for_legend,
                 render_mode="webgl"
             )
@@ -497,7 +497,7 @@ def make_contour_plot(df, z_column, title=None):
             x=df_valid['datetime'],
             y=df_valid['depth'],
             z=df_valid[z_column],
-            colorscale='Viridis',
+            colorscale='cividis',
             line_smoothing=0.85,
             contours=dict(
                 showlines=True,
@@ -1342,7 +1342,7 @@ def update_all_figs(n, selected_mission, range_slider_value, is_decoupled, plot_
                 marker=dict(
                     size=10,
                     color=track_data['unixtime'] if 'unixtime' in track_data.columns else 'blue',
-                    colorscale='Cividis',
+                    colorscale='cividis',
                     cmin=valid_map_data['unixtime'].min() if 'unixtime' in valid_map_data.columns else None,
                     cmax=valid_map_data['unixtime'].max() if 'unixtime' in valid_map_data.columns else None,
                     showscale=True if len(tickvals_map) > 0 else False,
