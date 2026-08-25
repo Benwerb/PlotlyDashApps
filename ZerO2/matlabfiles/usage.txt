@@ -1,0 +1,6 @@
+example usage of matlab functions:
+load('/Users/straylor/Documents/Projects/Low O2 Data/SBS 83/SN0250cal.mat')
+data = [p temp sal phase volts] ;
+[T250.O2_uM, T250.O2_T] = Calc_SBE63_O2(data, cal);
+[sol] = gsw_O2sol(sal,T250.O2_T,p,35,35); % umol L-1
+T250.O2Sat = T250.O2_uM ./ sol .* 100; (edited) 

@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 # from io import StringIO
 # import re
 from data_loader import GliderDataLoader, GulfStreamLoader, MapDataLoader, GliderGridDataLoader, MPADataLoader, gomofsdataloader, doppiodataloader
-# from nessie_interpolation_function import create_spatial_interpolation
+from nessie_interpolation_function import create_spatial_interpolation
 # import datetime as dt
 from typing import cast, List, Dict, Any
 # import pytz
@@ -458,7 +458,7 @@ def initialize_data_loaders():
         print("Initializing data loaders...")
         
         # Initialize core loaders first
-        cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25820301RT.txt','25921101RT.txt'], # '25706901RT.txt', '25720901RT.txt', '25821001RT.txt', 
+        cached_loader = CachedDataLoader(GliderDataLoader(filenames=['25820301RT.txt','25921101RT.txt','25706901RT.txt'], # '25706901RT.txt', '25720901RT.txt', '25821001RT.txt', 
             sample_rate=3, include_qc=False, range_start=None, range_end=None))
         print("✓ Glider data loader initialized")
         
@@ -513,7 +513,7 @@ def initialize_data_loaders():
         traceback.print_exc()
         return False
 
-glider_ids = ['SN203','SN211'] # 'SN209', 'SN210','SN069',
+glider_ids = ['SN209', 'SN210', 'SN069'] # 'SN209', 'SN210','SN069',
 
 # Initialize the app with a Bootstrap theme
 external_stylesheets = cast(List[str | Dict[str, Any]], [dbc.themes.FLATLY])
@@ -634,10 +634,13 @@ app.layout = dbc.Container([
                     dcc.RangeSlider(
                         id='RangeSlider',
                         updatemode='mouseup',  # don't let it update till mouse released
-                        min=unix_min,
-                        max=unix_max,
+                        # min=unix_min,
+                        # max=unix_max,
+                        min=1755014400,
+                        max=1756278000,
                         step=3600, # 1 hour
-                        value=[unix_max_minus_12hrs, unix_max],
+                        # value=[unix_max_minus_12hrs, unix_max],
+                        value=[1755014400, 1756278000],
                         marks=marks,
                         allowCross=False,
                         # tooltip={"placement": "bottom", "always_visible": False}
@@ -899,31 +902,31 @@ app.layout = dbc.Container([
                 ], xs=12, sm=12, md=12, lg=12, xl=12)
             ])
         ]),
-        # # --- Interpolation Map Tab ---
-        # dcc.Tab(label='Interpolation Map', value='tab-interpolation', children=[
-        #     dbc.Row([
-        #         dbc.Col([
-        #             html.Label('Select Parameter:'),
-        #             dcc.Dropdown(id='interpolation-parameter-dropdown',options=[{'label': 'pHin', 'value': 'pHin'},
-        #              {'label': 'rhodamine', 'value': 'rhodamine'}, {'label': 'temperature', 'value': 'temperature'},
-        #               {'label': 'salinity', 'value': 'salinity'}], value='rhodamine'),
-        #         ], xs=12, sm=12, md=3, lg=3, xl=3),
-        #         dbc.Col([
-        #             html.Label('Hours Back:'),
-        #             dcc.Slider(id='interpolation-hours-back-slider', min=1, max=24, step=1, value=3),
-        #         ], xs=12, sm=12, md=3, lg=3, xl=3),
-        #         dbc.Col([
-        #             html.Label('Select Platform:'),
-        #             dcc.Dropdown(id='interpolation-platform-dropdown',options=[{'label': 'Glider', 'value': 'Glider'},
-        #              {'label': 'Ship', 'value': 'Ship'}, {'label': 'LRAUV', 'value': 'LRAUV'}], value=['Glider','Ship','LRAUV'],multi=True),
-        #         ], xs=12, sm=12, md=3, lg=3, xl=3),
-        #     ], className='mb-3'),
-        #     dbc.Row([
-        #         dbc.Col([
-        #             dcc.Graph(id='interpolation-map', figure=go.Figure(), style={'height': '60vh', 'minHeight': '300px', 'width': '100%'})
-        #         ], xs=12, sm=12, md=12, lg=12, xl=12)
-        #     ])
-        # ]),
+        # --- Interpolation Map Tab ---
+        dcc.Tab(label='Interpolation Map', value='tab-interpolation', children=[
+            dbc.Row([
+                dbc.Col([
+                    html.Label('Select Parameter:'),
+                    dcc.Dropdown(id='interpolation-parameter-dropdown',options=[{'label': 'pHin', 'value': 'pHin'},
+                     {'label': 'rhodamine', 'value': 'rhodamine'}, {'label': 'temperature', 'value': 'temperature'},
+                      {'label': 'salinity', 'value': 'salinity'}], value='rhodamine'),
+                ], xs=12, sm=12, md=3, lg=3, xl=3),
+                dbc.Col([
+                    html.Label('Hours Back:'),
+                    dcc.Slider(id='interpolation-hours-back-slider', min=1, max=24, step=1, value=3),
+                ], xs=12, sm=12, md=3, lg=3, xl=3),
+                dbc.Col([
+                    html.Label('Select Platform:'),
+                    dcc.Dropdown(id='interpolation-platform-dropdown',options=[{'label': 'Glider', 'value': 'Glider'},
+                     {'label': 'Ship', 'value': 'Ship'}, {'label': 'LRAUV', 'value': 'LRAUV'}], value=['Glider','Ship','LRAUV'],multi=True),
+                ], xs=12, sm=12, md=3, lg=3, xl=3),
+            ], className='mb-3'),
+            dbc.Row([
+                dbc.Col([
+                    dcc.Graph(id='interpolation-map', figure=go.Figure(), style={'height': '60vh', 'minHeight': '300px', 'width': '100%'})
+                ], xs=12, sm=12, md=12, lg=12, xl=12)
+            ])
+        ]),
     ]),
 ], fluid=True, className='dashboard-container')
 
@@ -1028,9 +1031,9 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         df_map_filtered = df_map_filtered[(df_map_filtered['CastDirection'] == 'Down') | (df_map_filtered['CastDirection'] == 'Constant')]
         df_latest_filtered = df_latest_filtered[df_latest_filtered["DIVEDIR"] == -1]
     # Dataframes for map plot
-    ship_mask = df_map_filtered['Cruise'] == "RV Connecticut"
+    ship_mask = (df_map_filtered['Cruise'] == "RV Connecticut") & ~((df_map_filtered['lat'] == 0) & (df_map_filtered['lon'] == 0))
     lrauv_mask = df_map_filtered['Platform'] == "LRAUV"
-    sn203_mask = (df_map_filtered['Cruise'] == "25820301") & (df_map_filtered['Layer'] != 'WPT')
+    # sn203_mask = (df_map_filtered['Cruise'] == "25820301") & (df_map_filtered['Layer'] != 'WPT')
     sn209_mask = (df_map_filtered['Cruise'] == "25720901") & (df_map_filtered['Layer'] != 'WPT')
     sn210_mask = (df_map_filtered['Cruise'] == "25821001") & (df_map_filtered['Layer'] != 'WPT')
     sn069_mask = (df_map_filtered['Cruise'] == "25706901") & (df_map_filtered['Layer'] != 'WPT')
@@ -1101,12 +1104,12 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
         next_glider_lat_SN069 = []
         next_glider_lon_SN069 = []
     # Last Glider Location SN203
-    if len(df_map_filtered.loc[sn203_mask]) > 0:
-        last_glider_lat_SN203 = np.array(df_map_filtered.loc[sn203_mask, 'lat'])[-1]
-        last_glider_lon_SN203 = np.array(df_map_filtered.loc[sn203_mask, 'lon'])[-1]
-    else:
-        last_glider_lat_SN203 = []
-        last_glider_lon_SN203 = []
+    # if len(df_map_filtered.loc[sn203_mask]) > 0:
+    #     last_glider_lat_SN203 = np.array(df_map_filtered.loc[sn203_mask, 'lat'])[-1]
+    #     last_glider_lon_SN203 = np.array(df_map_filtered.loc[sn203_mask, 'lon'])[-1]
+    # else:
+    #     last_glider_lat_SN203 = []
+    #     last_glider_lon_SN203 = []
     # Last Glider Location SN211
     if len(df_map_filtered.loc[sn211_mask]) > 0:
         last_glider_lat_SN211 = np.array(df_map_filtered.loc[sn211_mask, 'lat'])[-1]
@@ -1390,37 +1393,37 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             showlegend=False
         ))
     # Set hovertext for SN203 based on selected parameter
-    if len(df_map_filtered.loc[sn203_mask]) > 0:
-        sn203_hovertext = df_map_filtered.loc[sn203_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[sn203_mask, selected_parameter]
-        sn203_hovertext_last = np.array(sn203_hovertext)[-1]
-        map_fig.add_trace(go.Scattermap(
-            lat=df_map_filtered.loc[sn203_mask, 'lat'],
-            lon=df_map_filtered.loc[sn203_mask, 'lon'],
-            mode='markers',
-            name='SN203',
-            hovertext=sn203_hovertext,
-            marker=dict(
-                size=10,
-                color=df_map_filtered.loc[sn203_mask, selected_parameter],
-                colorscale=cscale,
-                showscale=False,
-                cmin=cmin,
-                cmax=cmax,
-            ),
-        ))
-        map_fig.add_trace(go.Scattermap(
-            lat=[last_glider_lat_SN203],
-            lon=[last_glider_lon_SN203],
-            mode='markers',
-            name='SN203 Last Location',
-            hovertext=sn203_hovertext_last,
-            marker=dict(
-                size=10,
-                symbol='airport',
-                showscale=False,
-            ),
-            showlegend=False
-        ))
+    # if len(df_map_filtered.loc[sn203_mask]) > 0:
+    #     sn203_hovertext = df_map_filtered.loc[sn203_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[sn203_mask, selected_parameter]
+    #     sn203_hovertext_last = np.array(sn203_hovertext)[-1]
+    #     map_fig.add_trace(go.Scattermap(
+    #         lat=df_map_filtered.loc[sn203_mask, 'lat'],
+    #         lon=df_map_filtered.loc[sn203_mask, 'lon'],
+    #         mode='markers',
+    #         name='SN203',
+    #         hovertext=sn203_hovertext,
+    #         marker=dict(
+    #             size=10,
+    #             color=df_map_filtered.loc[sn203_mask, selected_parameter],
+    #             colorscale=cscale,
+    #             showscale=False,
+    #             cmin=cmin,
+    #             cmax=cmax,
+    #         ),
+    #     ))
+    #     map_fig.add_trace(go.Scattermap(
+    #         lat=[last_glider_lat_SN203],
+    #         lon=[last_glider_lon_SN203],
+    #         mode='markers',
+    #         name='SN203 Last Location',
+    #         hovertext=sn203_hovertext_last,
+    #         marker=dict(
+    #             size=10,
+    #             symbol='airport',
+    #             showscale=False,
+    #         ),
+    #         showlegend=False
+    #     ))
     # Set hovertext for SN211 based on selected parameter
     if len(df_map_filtered.loc[sn211_mask]) > 0:
         sn211_hovertext = df_map_filtered.loc[sn211_mask, 'Datetime'].dt.strftime('%Y-%m-%d %H:%M:%S') if selected_parameter == 'unixTimestamp' else df_map_filtered.loc[sn211_mask, selected_parameter]
@@ -1752,50 +1755,51 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
             go.Figure(), dropdown_options, dropdown_options
         )
 
-# @app.callback(
-#     Output('interpolation-map', 'figure'),
-#     [Input('interpolation-parameter-dropdown', 'value'),
-#      Input('interpolation-hours-back-slider', 'value'),
-#      Input('interpolation-platform-dropdown', 'value')]
-# )
-# def update_interpolation(parameter, hours_back, platforms):
-#     if not parameter or not platforms:
-#         return go.Figure()
+@app.callback(
+    Output('interpolation-map', 'figure'),
+    [Input('interpolation-parameter-dropdown', 'value'),
+     Input('interpolation-hours-back-slider', 'value'),
+     Input('interpolation-platform-dropdown', 'value')]
+)
+def update_interpolation(parameter, hours_back, platforms):
+    if not parameter or not platforms:
+        return go.Figure()
     
-#     try:
-#         # Get your filtered dataframe
-#         df_map = map_loader.load_data()
+    try:
+        # Ensure data loader is initialized
+        if cached_map_loader is None:
+            if not initialize_data_loaders():
+                return go.Figure()
         
-#         if df_map.empty:
-#             print("No data available for interpolation")
-#             return go.Figure()
+        # Get your filtered dataframe using cached loader
+        df_map = cached_map_loader.get_data()
         
-#         # print(f"Creating interpolation for {parameter} with {hours_back} hours back, platforms: {platforms}, layer: {layer}, method: {method}")
+        if df_map.empty:
+            print("No data available for interpolation")
+            return go.Figure()
         
-#         # Create interpolation
-#         fig, metadata = create_spatial_interpolation(
-#             df=df_map,
-#             parameter=parameter,
-#             hours_back=hours_back,
-#             platform_filter=platforms,
-#             layer_filter='MLD',
-#             grid_resolution=80,
-#             method='linear',
-#             nan_filter_parameters=[parameter]
-#         )
+        # Create interpolation
+        fig, metadata = create_spatial_interpolation(
+            df=df_map,
+            parameter=parameter,
+            hours_back=hours_back,
+            platform_filter=platforms,
+            layer_filter='MLD',
+            grid_resolution=80,
+            method='linear',
+            nan_filter_parameters=[parameter]
+        )
         
-#         if fig is not None:
-#             # print(f"Interpolation successful: {metadata}")
-#             return fig
-#         else:
-#             # print("Interpolation failed - no figure returned")
-#             return go.Figure()
+        if fig is not None:
+            return fig
+        else:
+            return go.Figure()
             
-    # except Exception as e:
-    #     # print(f"Error in interpolation callback: {e}")
-    #     import traceback
-    #     traceback.print_exc()
-    #     return go.Figure()
+    except Exception as e:
+        print(f"Error in interpolation callback: {e}")
+        import traceback
+        traceback.print_exc()
+        return go.Figure()
 
 
 @app.callback(
@@ -1817,27 +1821,52 @@ def update_all_figs(n, selected_parameter, map_options, glider_overlay, selected
 def update_range_slider(glider_overlay, n):
     log_memory_usage()  # Add this line
     
-    # Ensure data loaders are initialized
+    # Hard-coded time range in Unix timestamps
+    unix_min = 1755014400
+    unix_max = 1756278000
+    unix_max_minus_12hrs = unix_max - 60*60*12
+    
+    # Generate marks from hard-coded timestamps
+    t_min = pd.Timestamp.fromtimestamp(unix_min, tz='UTC')
+    t_max = pd.Timestamp.fromtimestamp(unix_max, tz='UTC')
+    # Round t_min up to next full hour
+    t_start = (t_min + pd.Timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    # Total range in seconds
+    total_seconds = (t_max - t_start).total_seconds()
+    if total_seconds > 0:
+        # Compute spacing interval (rounded to nearest hour step)
+        target_mark_count = 10
+        interval_seconds = total_seconds // target_mark_count
+        interval_hours = max(1, int(round(interval_seconds / 3600)))
+        # Generate evenly spaced timestamps
+        timestamps = pd.date_range(start=t_start, end=t_max, freq=f'{interval_hours}h')
+        # Convert to Unix timestamp and format labels
+        marks = {
+            int(ts.timestamp()): {
+                'label': ts.strftime('%m/%d') + '\n' + ts.strftime('%H:%M'),
+                'style': {'fontSize': '12px', 'whiteSpace': 'pre'}
+            }
+            for ts in timestamps
+        }
+    else:
+        marks = {}
+    
+    # Ensure data loaders are initialized (still needed for other outputs)
     if cached_map_loader is None:
         if not initialize_data_loaders():
             # Return safe defaults if initialization fails
-            return 0, 1, [0, 1], {0: "Init failed"}, "Initialization failed", "No data", "No data", "No data"
+            return unix_min, unix_max, [unix_min, unix_max], marks, "Initialization failed", "No data", "No data", "No data"
     
     try:
         df_map = cached_map_loader.get_data()
         if df_map.empty:
-            # Return safe defaults if no data - must return 8 values to match outputs
-            return 0, 1, [0, 1], {0: "No data"}, "No data available", "No data", "No data", "No data"
-        
-        unix_min = df_map["unixTimestamp"].min()
-        unix_max = df_map["unixTimestamp"].max()
-        unix_max_minus_12hrs = unix_max - 60*60*12
-        marks = range_slider_marks(df_map, 10)
+            # Return hard-coded values even if no data - must return 8 values to match outputs
+            return unix_min, unix_max, [unix_min, unix_max], marks, "No data available", "No data", "No data", "No data"
 
         # Filter out WPT rows for datetime calculation
         non_wpt_data = df_map[df_map['Layer'] != 'WPT']
         if non_wpt_data.empty:
-            return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks, "No non-WPT data", "No data", "No data", "No data"
+            return unix_min, unix_max, [unix_min, unix_max], marks, "No non-WPT data", "No data", "No data", "No data"
         
         datetime_max = non_wpt_data["Datetime"].max()
         utc_str = datetime_max.strftime("%Y-%m-%d %H:%M:%S")
@@ -1873,12 +1902,12 @@ def update_range_slider(glider_overlay, n):
         update_projection_str_209 = get_glider_projection(df_map, '25720901')
         update_projection_str_210 = get_glider_projection(df_map, '25821001')
 
-        return unix_min, unix_max, [unix_max_minus_12hrs, unix_max], marks, update_str, update_projection_str_069, update_projection_str_209, update_projection_str_210
+        return unix_min, unix_max, [unix_min, unix_max], marks, update_str, update_projection_str_069, update_projection_str_209, update_projection_str_210
     
     except Exception as e:
-        # Return safe defaults on any error - must return 8 values to match outputs
+        # Return hard-coded values on any error - must return 8 values to match outputs
         print(f"Error in update_range_slider: {e}")
-        return 0, 1, [0, 1], {0: "Error"}, f"Error: {str(e)}", "Error", "Error", "Error"
+        return unix_min, unix_max, [unix_min, unix_max], marks, f"Error: {str(e)}", "Error", "Error", "Error"
 
 def log_memory_usage():
     process = psutil.Process(os.getpid())
